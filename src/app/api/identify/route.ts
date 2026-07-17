@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
       )
       .join("\n");
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-8b" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
 
     const prompt = `Ikaw ay isang signature analysis expert.
 
