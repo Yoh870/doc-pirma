@@ -1,9 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,58 +15,44 @@ export async function POST(req: NextRequest) {
     }
 
     const doctorList = signatures
-      .map((s: { doctor_id: string; doctor_name: string }, i: number) => `${i + 1}. Dr. ${s.doctor_name} (ID: ${s.doctor_id})`)
+      .map((s: { doctor_id: string; doctor_name: string }, i: number) =>
+        `${i + 1}. ${s.doctor_name} (ID: ${s.doctor_id})`
+      )
       .join("\n");
 
-    const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Ikaw ay isang signature analysis expert. 
-              
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const prompt = `Ikaw ay isang signature analysis expert.
+
 Tingnan mo ang uploaded signature at ihambing sa listahan ng mga doktor.
 
 Mga doktor sa sistema:
 ${doctorList}
 
-Sagutin mo sa JSON format:
+Sagutin mo ONLY in JSON format, walang markdown, walang backticks:
 {
   "identified_doctor_id": "UUID ng doktor o null kung hindi makilala",
   "identified_doctor_name": "Pangalan ng doktor o null",
   "confidence_score": 0.0 hanggang 1.0,
   "reasoning": "Bakit mo na-identify ito",
   "is_match_found": true o false
-}
+}`;
 
-Kung hindi mo masigurado, ibaba ang confidence_score at sabihin sa reasoning.`,
-            },
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: "image/jpeg",
-                data: signatureBase64,
-              },
-            },
-          ],
+    const result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          mimeType: "image/jpeg",
+          data: signatureBase64,
         },
-      ],
-    });
+      },
+    ]);
 
-    const content = response.content[0];
-    if (content.type !== "text") {
-      throw new Error("Unexpected response type");
-    }
+    const text = result.response.text().trim();
+    const cleaned = text.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(cleaned);
 
-    const cleaned = content.text.replace(/```json|```/g, "").trim();
-    const result = JSON.parse(cleaned);
-
-    return NextResponse.json(result);
+    return NextResponse.json(parsed);
   } catch (error) {
     console.error("Identify error:", error);
     return NextResponse.json(
