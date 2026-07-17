@@ -65,9 +65,9 @@ export default function ScanPage() {
       });
 
       // 3. Prepare signatures list for AI
-      const signatureList = signatures.map((s: any) => ({
+      const signatureList = signatures.map((s: { id: string; image_url: string; doctor_id: string; doctors: { id: string; name: string }[] }) => ({
         doctor_id: s.doctor_id,
-        doctor_name: s.doctors?.name || "Unknown",
+        doctor_name: s.doctors?.[0]?.name || "Unknown",
         image_url: s.image_url,
       }));
 

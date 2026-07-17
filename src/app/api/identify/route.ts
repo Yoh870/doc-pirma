@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     }
 
     const doctorList = signatures
-      .map((s: any, i: number) => `${i + 1}. Dr. ${s.doctor_name} (ID: ${s.doctor_id})`)
+      .map((s: { doctor_id: string; doctor_name: string }, i: number) => `${i + 1}. Dr. ${s.doctor_name} (ID: ${s.doctor_id})`)
       .join("\n");
 
     const response = await anthropic.messages.create({
