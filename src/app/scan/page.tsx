@@ -54,15 +54,32 @@ export default function ScanPage() {
         return;
       }
 
-      // 2. Convert uploaded image to base64
-      const base64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result.split(",")[1]);
-        };
-        reader.readAsDataURL(image);
-      });
+      // 2. Compress + convert to base64
+    const base64 = await new Promise<string>((resolve) => {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d")!;
+    const img = new Image();
+    img.onload = () => {
+        // Resize to max 800px
+        const maxSize = 800;
+        let { width, height } = img;
+        if (width > maxSize || height > maxSize) {
+        if (width > height) {
+            height = (height / width) * maxSize;
+            width = maxSize;
+        } else {
+            width = (width / height) * maxSize;
+            height = maxSize;
+        }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressed = canvas.toDataURL("image/jpeg", 0.7);
+        resolve(compressed.split(",")[1]);
+    };
+    img.src = URL.createObjectURL(image);
+    });
 
       // 3. Prepare signatures list for AI
       const signatureList = signatures.map((s: { id: string; image_url: string; doctor_id: string; doctors: { id: string; name: string }[] }) => ({
