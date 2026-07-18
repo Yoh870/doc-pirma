@@ -126,8 +126,12 @@ Sagutin mo ONLY in valid JSON format (walang markdown, walang backticks):
 
     // 8. Get the matched doctor's signature image
     let referenceImageUrl = null;
+    console.log("Identified doctor ID:", parsed.identified_doctor_id);
+    console.log("Available signatures:", signatures.map((s: any) => ({ id: s.doctor.id, name: s.doctor.name })));
+
     if (parsed.identified_doctor_id) {
       const matchedSig = signatures.find((s: any) => s.doctor.id === parsed.identified_doctor_id);
+      console.log("Matched signature:", matchedSig);
       if (matchedSig) {
         referenceImageUrl = matchedSig.image_url;
       }
@@ -135,7 +139,7 @@ Sagutin mo ONLY in valid JSON format (walang markdown, walang backticks):
 
     return NextResponse.json({
       ...parsed,
-      referenceImageUrl, // Add this
+      referenceImageUrl,
     });
 
   } catch (error) {

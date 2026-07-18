@@ -224,6 +224,15 @@ export default function ScanPage() {
             </h2>
           </div>
 
+          {/* Doctor Name - Big Green Text */}
+          {result.is_match_found && (
+            <div className="mb-6 text-center">
+              <p className="text-green-400 text-5xl font-bold">
+                {result.identified_doctor_name}
+              </p>
+            </div>
+          )}
+
           {/* Image Comparison */}
           {result.is_match_found && preview && result.referenceImageUrl && (
             <div className="bg-gray-900/50 rounded-xl p-4 mb-4">
