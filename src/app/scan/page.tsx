@@ -234,6 +234,15 @@ export default function ScanPage() {
           )}
 
           {/* Image Comparison */}
+          {/* DEBUG - Show referenceImageUrl value */}
+          {result.is_match_found && (
+            <div className="bg-gray-800 rounded-xl p-3 mb-4 text-center">
+              <p className="text-gray-500 text-xs mb-1">DEBUG:</p>
+              <p className="text-gray-300 text-xs break-all">
+                {result.referenceImageUrl ? "URL: " + result.referenceImageUrl : "referenceImageUrl is NULL"}
+              </p>
+            </div>
+          )}
           {result.is_match_found && preview && result.referenceImageUrl && (
             <div className="bg-gray-900/50 rounded-xl p-4 mb-4">
               <p className="text-gray-400 text-sm mb-3">Comparison:</p>
