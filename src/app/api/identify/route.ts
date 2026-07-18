@@ -124,7 +124,20 @@ Sagutin mo ONLY in valid JSON format (walang markdown, walang backticks):
       console.error("History insert error:", historyError);
     }
 
-    return NextResponse.json(parsed);
+    // 8. Get the matched doctor's signature image
+    let referenceImageUrl = null;
+    if (parsed.identified_doctor_id) {
+      const matchedSig = signatures.find((s: any) => s.doctor.id === parsed.identified_doctor_id);
+      if (matchedSig) {
+        referenceImageUrl = matchedSig.image_url;
+      }
+    }
+
+    return NextResponse.json({
+      ...parsed,
+      referenceImageUrl, // Add this
+    });
+
   } catch (error) {
     console.error("Identify error:", error);
     return NextResponse.json(
