@@ -11,6 +11,7 @@ interface ScanResult {
   confidence_score: number;
   reasoning: string;
   is_match_found: boolean;
+  referenceImageUrl?: string | null;
 }
 
 export default function ScanPage() {
@@ -223,12 +224,28 @@ export default function ScanPage() {
             </h2>
           </div>
 
-          {result.is_match_found && (
+          {/* Image Comparison */}
+          {result.is_match_found && preview && result.referenceImageUrl && (
             <div className="bg-gray-900/50 rounded-xl p-4 mb-4">
-              <p className="text-gray-400 text-sm">Doktor:</p>
-              <p className="text-white text-2xl font-bold mt-1">
-                {result.identified_doctor_name}
-              </p>
+              <p className="text-gray-400 text-sm mb-3">Comparison:</p>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <p className="text-gray-500 text-xs mb-2 text-center">Uploaded</p>
+                  <img
+                    src={preview}
+                    alt="Uploaded signature"
+                    className="w-full h-32 object-cover rounded-lg border border-gray-600 bg-white p-2"
+                  />
+                </div>
+                <div className="flex-1">
+                  <p className="text-gray-500 text-xs mb-2 text-center">Reference</p>
+                  <img
+                    src={result.referenceImageUrl}
+                    alt="Reference signature"
+                    className="w-full h-32 object-cover rounded-lg border border-gray-600 bg-white p-2"
+                  />
+                </div>
+              </div>
             </div>
           )}
 
