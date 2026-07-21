@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Edit2, X } from "lucide-react";
 
 interface Doctor {
   id: string;
@@ -23,12 +23,19 @@ const SPECIALTIES = [
   "Orthopedics",
   "Dermatology",
   "Emergency",
+  "Derma",
+  "Optha",
+  "ENT",
 ];
 
 export default function DoctorsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newDoctor, setNewDoctor] = useState({
+  const [selectedSpecialty, setSelectedSpecialty] = useState<string>("All");
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
+  
+  const [formData, setFormData] = useState({
     name: "",
     department: "",
     specialty: "",
@@ -54,31 +61,60 @@ export default function DoctorsPage() {
     }
   }
 
-  async function handleAddDoctor(e: React.FormEvent) {
+  // Filter doctors by selected specialty
+  const filteredDoctors =
+    selectedSpecialty === "All"
+      ? doctors
+      : doctors.filter((d) => d.specialty === selectedSpecialty);
+
+  // Get unique specialties from existing doctors
+  const uniqueSpecialties = Array.from(
+    new Set(doctors.map((d) => d.specialty))
+  ).filter(Boolean);
+
+  async function handleSaveDoctor(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!newDoctor.name || !newDoctor.department || !newDoctor.specialty) {
+    if (!formData.name || !formData.department || !formData.specialty) {
       alert("Please fill in all fields");
       return;
     }
 
     try {
-      const { error } = await supabase.from("doctors").insert([
-        {
-          name: newDoctor.name,
-          department: newDoctor.department,
-          specialty: newDoctor.specialty,
-        },
-      ]);
+      if (editingDoctor) {
+        // UPDATE existing doctor
+        const { error } = await supabase
+          .from("doctors")
+          .update({
+            name: formData.name,
+            department: formData.department,
+            specialty: formData.specialty,
+          })
+          .eq("id", editingDoctor.id);
 
-      if (error) throw error;
+        if (error) throw error;
+        alert("Doctor updated successfully!");
+        setEditingDoctor(null);
+      } else {
+        // CREATE new doctor
+        const { error } = await supabase.from("doctors").insert([
+          {
+            name: formData.name,
+            department: formData.department,
+            specialty: formData.specialty,
+          },
+        ]);
 
-      setNewDoctor({ name: "", department: "", specialty: "" });
+        if (error) throw error;
+        alert("Doctor added successfully!");
+        setIsAddingNew(false);
+      }
+
+      setFormData({ name: "", department: "", specialty: "" });
       fetchDoctors();
-      alert("Doctor added successfully!");
     } catch (err) {
-      console.error("Error adding doctor:", err);
-      alert("Failed to add doctor");
+      console.error("Error saving doctor:", err);
+      alert("Failed to save doctor");
     }
   }
 
@@ -98,78 +134,87 @@ export default function DoctorsPage() {
     }
   }
 
+  function openEditModal(doctor: Doctor) {
+    setEditingDoctor(doctor);
+    setFormData({
+      name: doctor.name,
+      department: doctor.department,
+      specialty: doctor.specialty,
+    });
+    setIsAddingNew(false);
+  }
+
+  function closeModals() {
+    setEditingDoctor(null);
+    setIsAddingNew(false);
+    setFormData({ name: "", department: "", specialty: "" });
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-6">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">Mga Doktor</h1>
           <p className="text-slate-400">Manage doctor profiles and signatures</p>
         </div>
 
-        {/* Add Doctor Form */}
-        <div className="bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700 p-6 mb-8">
-          <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+        {/* Add Doctor Button */}
+        <div className="mb-6">
+          <button
+            onClick={() => {
+              setIsAddingNew(true);
+              setEditingDoctor(null);
+              setFormData({ name: "", department: "", specialty: "" });
+            }}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
+          >
             <Plus size={20} />
             Add New Doctor
-          </h2>
-
-          <form onSubmit={handleAddDoctor} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Doctor Name */}
-              <input
-                type="text"
-                placeholder="Doctor Name"
-                value={newDoctor.name}
-                onChange={(e) =>
-                  setNewDoctor({ ...newDoctor, name: e.target.value })
-                }
-                className="px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
-              />
-
-              {/* Department */}
-              <input
-                type="text"
-                placeholder="Department"
-                value={newDoctor.department}
-                onChange={(e) =>
-                  setNewDoctor({ ...newDoctor, department: e.target.value })
-                }
-                className="px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
-              />
-
-              {/* Specialty Dropdown */}
-              <select
-                value={newDoctor.specialty}
-                onChange={(e) =>
-                  setNewDoctor({ ...newDoctor, specialty: e.target.value })
-                }
-                className="px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white focus:outline-none focus:border-blue-500"
-              >
-                <option value="">Select Specialty</option>
-                {SPECIALTIES.map((spec) => (
-                  <option key={spec} value={spec}>
-                    {spec}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition-colors"
-            >
-              Add Doctor
-            </button>
-          </form>
+          </button>
         </div>
 
-        {/* Doctors List */}
+        {/* Specialty Filter Tabs */}
+        {doctors.length > 0 && (
+          <div className="mb-6 flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedSpecialty("All")}
+              className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+                selectedSpecialty === "All"
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+              }`}
+            >
+              All ({doctors.length})
+            </button>
+
+            {uniqueSpecialties.map((spec) => {
+              const count = doctors.filter((d) => d.specialty === spec).length;
+              return (
+                <button
+                  key={spec}
+                  onClick={() => setSelectedSpecialty(spec)}
+                  className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+                    selectedSpecialty === spec
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                  }`}
+                >
+                  {spec} ({count})
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Doctors Table */}
         {loading ? (
           <div className="text-center text-slate-400">Loading doctors...</div>
-        ) : doctors.length === 0 ? (
+        ) : filteredDoctors.length === 0 ? (
           <div className="text-center text-slate-400">
-            No doctors added yet
+            {selectedSpecialty === "All"
+              ? "No doctors added yet"
+              : `No doctors in ${selectedSpecialty}`}
           </div>
         ) : (
           <div className="overflow-x-auto bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700">
@@ -189,17 +234,20 @@ export default function DoctorsPage() {
                     Added
                   </th>
                   <th className="px-6 py-3 text-center text-sm font-semibold">
-                    Action
+                    Actions
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {doctors.map((doctor) => (
+                {filteredDoctors.map((doctor) => (
                   <tr
                     key={doctor.id}
-                    className="border-b border-slate-700 hover:bg-slate-800/30 transition-colors"
+                    className="border-b border-slate-700 hover:bg-slate-800/50 transition-colors cursor-pointer"
+                    onClick={() => openEditModal(doctor)}
                   >
-                    <td className="px-6 py-4 text-sm">{doctor.name}</td>
+                    <td className="px-6 py-4 text-sm font-medium">
+                      {doctor.name}
+                    </td>
                     <td className="px-6 py-4 text-sm">{doctor.department}</td>
                     <td className="px-6 py-4 text-sm">
                       <span className="bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full text-xs font-medium">
@@ -210,12 +258,28 @@ export default function DoctorsPage() {
                       {new Date(doctor.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => handleDeleteDoctor(doctor.id)}
-                        className="text-red-400 hover:text-red-300 transition-colors"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      <div className="flex justify-center gap-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModal(doctor);
+                          }}
+                          className="text-blue-400 hover:text-blue-300 transition-colors"
+                          title="Edit"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteDoctor(doctor.id);
+                          }}
+                          className="text-red-400 hover:text-red-300 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -224,6 +288,97 @@ export default function DoctorsPage() {
           </div>
         )}
       </div>
+
+      {/* Add/Edit Modal */}
+      {(isAddingNew || editingDoctor) && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-md w-full">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-white">
+                {editingDoctor ? "Edit Doctor" : "Add New Doctor"}
+              </h2>
+              <button
+                onClick={closeModals}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveDoctor} className="space-y-4">
+              {/* Doctor Name */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Doctor Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="Dr. John Doe"
+                  value={formData.name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
+                  className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Department */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Department
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Surgical Ward"
+                  value={formData.department}
+                  onChange={(e) =>
+                    setFormData({ ...formData, department: e.target.value })
+                  }
+                  className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Specialty Dropdown */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Specialty
+                </label>
+                <select
+                  value={formData.specialty}
+                  onChange={(e) =>
+                    setFormData({ ...formData, specialty: e.target.value })
+                  }
+                  className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white focus:outline-none focus:border-blue-500"
+                >
+                  <option value="">Select Specialty</option>
+                  {SPECIALTIES.map((spec) => (
+                    <option key={spec} value={spec}>
+                      {spec}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={closeModals}
+                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition-colors"
+                >
+                  {editingDoctor ? "Update" : "Add"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
