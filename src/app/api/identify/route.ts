@@ -90,6 +90,7 @@ Sagutin mo ONLY in valid JSON format (walang markdown, walang backticks):
 
     // 5. Add reference signature images
     for (const sig of signatures.slice(0, 5)) {
+      // Limit to 5 references para hindi sobrang marami
       try {
         const imageResponse = await fetch(sig.image_url);
         const blob = await imageResponse.arrayBuffer();
@@ -114,7 +115,7 @@ Sagutin mo ONLY in valid JSON format (walang markdown, walang backticks):
 
     // 7. Store result in scan_history
     const { error: historyError } = await supabase.from("scan_history").insert({
-      scanned_image_url: signatureBase64,
+      scanned_image_url: signatureBase64, // or store in storage if preferred
       identified_doctor_id: parsed.identified_doctor_id,
       confidence_score: parsed.confidence_score,
       notes: parsed.reasoning,
@@ -122,24 +123,10 @@ Sagutin mo ONLY in valid JSON format (walang markdown, walang backticks):
 
     if (historyError) {
       console.error("History insert error:", historyError);
+      // Don't fail the request, just log it
     }
 
-    // 8. Get the matched doctor's signature image
-    let referenceImageUrl = null;
-    if (parsed.identified_doctor_name) {
-      const matchedSig = signatures.find((s: any) => s.doctor.name === parsed.identified_doctor_name);
-      console.log("Searching for doctor:", parsed.identified_doctor_name);
-      console.log("Found signature:", matchedSig?.image_url);
-      if (matchedSig) {
-        referenceImageUrl = matchedSig.image_url;
-      }
-    }
-
-    return NextResponse.json({
-      ...parsed,
-      referenceImageUrl,
-    });
-
+    return NextResponse.json(parsed);
   } catch (error) {
     console.error("Identify error:", error);
     return NextResponse.json(

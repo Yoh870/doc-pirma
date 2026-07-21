@@ -1,215 +1,229 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Doctor } from "@/lib/supabase";
-import { Plus, ArrowLeft, Trash2, User } from "lucide-react";
-import Link from "next/link";
+import { Plus, Trash2 } from "lucide-react";
+
+interface Doctor {
+  id: string;
+  name: string;
+  department: string;
+  specialty: string;
+  created_at: string;
+}
+
+const SPECIALTIES = [
+  "Surgical",
+  "Pediatrics",
+  "Psychiatry",
+  "Medical",
+  "OB-GYN",
+  "Cardiology",
+  "Neurology",
+  "Orthopedics",
+  "Dermatology",
+  "Emergency",
+];
 
 export default function DoctorsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [name, setName] = useState("");
-  const [department, setDepartment] = useState("");
-  const [specialty, setSpecialty] = useState("");
-  const [signature, setSignature] = useState<File | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [newDoctor, setNewDoctor] = useState({
+    name: "",
+    department: "",
+    specialty: "",
+  });
 
   useEffect(() => {
     fetchDoctors();
   }, []);
 
   async function fetchDoctors() {
-    setLoading(true);
-    const { data } = await supabase
-      .from("doctors")
-      .select("*")
-      .order("name");
-    setDoctors(data || []);
-    setLoading(false);
-  }
+    try {
+      const { data, error } = await supabase
+        .from("doctors")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSignature(file);
-      setPreview(URL.createObjectURL(file));
+      if (error) throw error;
+      setDoctors(data || []);
+    } catch (err) {
+      console.error("Error fetching doctors:", err);
+    } finally {
+      setLoading(false);
     }
   }
 
-  async function handleSave() {
-    if (!name || !signature) {
-      alert("Lagyan mo ng pangalan at signature!");
+  async function handleAddDoctor(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!newDoctor.name || !newDoctor.department || !newDoctor.specialty) {
+      alert("Please fill in all fields");
       return;
     }
-    setSaving(true);
+
     try {
-      // 1. Save doctor
-      const { data: doctor, error: docError } = await supabase
-        .from("doctors")
-        .insert({ name, department, specialty })
-        .select()
-        .single();
+      const { error } = await supabase.from("doctors").insert([
+        {
+          name: newDoctor.name,
+          department: newDoctor.department,
+          specialty: newDoctor.specialty,
+        },
+      ]);
 
-      if (docError) throw docError;
+      if (error) throw error;
 
-      // 2. Upload signature image
-      const filePath = `${doctor.id}/${Date.now()}.jpg`;
-      const { error: uploadError } = await supabase.storage
-        .from("signatures")
-        .upload(filePath, signature);
-
-      if (uploadError) throw uploadError;
-
-      // 3. Get public URL
-      const { data: urlData } = supabase.storage
-        .from("signatures")
-        .getPublicUrl(filePath);
-
-      // 4. Save signature record
-      await supabase.from("signatures").insert({
-        doctor_id: doctor.id,
-        image_url: urlData.publicUrl,
-      });
-
-      // Reset form
-      setName("");
-      setDepartment("");
-      setSpecialty("");
-      setSignature(null);
-      setPreview(null);
-      setShowForm(false);
+      setNewDoctor({ name: "", department: "", specialty: "" });
       fetchDoctors();
+      alert("Doctor added successfully!");
     } catch (err) {
-      alert("May error! Subukan ulit.");
-      console.error(err);
+      console.error("Error adding doctor:", err);
+      alert("Failed to add doctor");
     }
-    setSaving(false);
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Delete ang doktor na ito?")) return;
-    await supabase.from("doctors").delete().eq("id", id);
-    fetchDoctors();
+  async function handleDeleteDoctor(id: string) {
+    if (!confirm("Are you sure you want to delete this doctor?")) return;
+
+    try {
+      const { error } = await supabase.from("doctors").delete().eq("id", id);
+
+      if (error) throw error;
+
+      fetchDoctors();
+      alert("Doctor deleted successfully!");
+    } catch (err) {
+      console.error("Error deleting doctor:", err);
+      alert("Failed to delete doctor");
+    }
   }
 
   return (
-    <main className="min-h-screen bg-gray-950 p-4 max-w-2xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6 pt-4">
-        <Link href="/" className="text-gray-400 hover:text-white">
-          <ArrowLeft size={24} />
-        </Link>
-        <h1 className="text-2xl font-bold text-white flex-1">Mga Doktor</h1>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-semibold transition-colors"
-        >
-          <Plus size={18} />
-          Dagdag
-        </button>
-      </div>
-
-      {/* Add form */}
-      {showForm && (
-        <div className="bg-gray-800 rounded-2xl p-5 mb-6 border border-gray-700">
-          <h2 className="text-lg font-bold text-white mb-4">Bagong Doktor</h2>
-          <div className="space-y-3">
-            <div>
-              <label className="text-gray-400 text-sm mb-1 block">Pangalan *</label>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Dr. Juan dela Cruz"
-                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="text-gray-400 text-sm mb-1 block">Department</label>
-              <input
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                placeholder="Internal Medicine"
-                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="text-gray-400 text-sm mb-1 block">Specialty</label>
-              <input
-                value={specialty}
-                onChange={(e) => setSpecialty(e.target.value)}
-                placeholder="Cardiologist"
-                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="text-gray-400 text-sm mb-1 block">Signature Image *</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"
-              />
-              {preview && (
-                <img
-                  src={preview}
-                  alt="Preview"
-                  className="mt-3 max-h-32 rounded-lg border border-gray-700 bg-white p-2"
-                />
-              )}
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 text-white py-3 rounded-xl font-semibold transition-colors"
-              >
-                {saving ? "Sine-save..." : "I-save"}
-              </button>
-              <button
-                onClick={() => setShowForm(false)}
-                className="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-xl font-semibold transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-6">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-white mb-2">Mga Doktor</h1>
+          <p className="text-slate-400">Manage doctor profiles and signatures</p>
         </div>
-      )}
 
-      {/* Doctors list */}
-      {loading ? (
-        <div className="text-center text-gray-500 py-12">Loading...</div>
-      ) : doctors.length === 0 ? (
-        <div className="text-center text-gray-600 py-12">
-          <User size={48} className="mx-auto mb-3 opacity-30" />
-          <p>Wala pang doktor. Mag-dagdag ka!</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {doctors.map((doc) => (
-            <div
-              key={doc.id}
-              className="bg-gray-800 rounded-2xl p-4 border border-gray-700 flex items-center justify-between"
+        {/* Add Doctor Form */}
+        <div className="bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700 p-6 mb-8">
+          <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
+            <Plus size={20} />
+            Add New Doctor
+          </h2>
+
+          <form onSubmit={handleAddDoctor} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Doctor Name */}
+              <input
+                type="text"
+                placeholder="Doctor Name"
+                value={newDoctor.name}
+                onChange={(e) =>
+                  setNewDoctor({ ...newDoctor, name: e.target.value })
+                }
+                className="px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+              />
+
+              {/* Department */}
+              <input
+                type="text"
+                placeholder="Department"
+                value={newDoctor.department}
+                onChange={(e) =>
+                  setNewDoctor({ ...newDoctor, department: e.target.value })
+                }
+                className="px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+              />
+
+              {/* Specialty Dropdown */}
+              <select
+                value={newDoctor.specialty}
+                onChange={(e) =>
+                  setNewDoctor({ ...newDoctor, specialty: e.target.value })
+                }
+                className="px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white focus:outline-none focus:border-blue-500"
+              >
+                <option value="">Select Specialty</option>
+                {SPECIALTIES.map((spec) => (
+                  <option key={spec} value={spec}>
+                    {spec}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition-colors"
             >
-              <div>
-                <p className="font-semibold text-white">{doc.name}</p>
-                <p className="text-gray-400 text-sm">
-                  {doc.department || "—"} · {doc.specialty || "—"}
-                </p>
-              </div>
-              <button
-                onClick={() => handleDelete(doc.id)}
-                className="text-gray-600 hover:text-red-400 transition-colors p-2"
-              >
-                <Trash2 size={18} />
-              </button>
-            </div>
-          ))}
+              Add Doctor
+            </button>
+          </form>
         </div>
-      )}
-    </main>
+
+        {/* Doctors List */}
+        {loading ? (
+          <div className="text-center text-slate-400">Loading doctors...</div>
+        ) : doctors.length === 0 ? (
+          <div className="text-center text-slate-400">
+            No doctors added yet
+          </div>
+        ) : (
+          <div className="overflow-x-auto bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700">
+            <table className="w-full text-white">
+              <thead>
+                <tr className="border-b border-slate-700 bg-slate-800/30">
+                  <th className="px-6 py-3 text-left text-sm font-semibold">
+                    Name
+                  </th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold">
+                    Department
+                  </th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold">
+                    Specialty
+                  </th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold">
+                    Added
+                  </th>
+                  <th className="px-6 py-3 text-center text-sm font-semibold">
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {doctors.map((doctor) => (
+                  <tr
+                    key={doctor.id}
+                    className="border-b border-slate-700 hover:bg-slate-800/30 transition-colors"
+                  >
+                    <td className="px-6 py-4 text-sm">{doctor.name}</td>
+                    <td className="px-6 py-4 text-sm">{doctor.department}</td>
+                    <td className="px-6 py-4 text-sm">
+                      <span className="bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full text-xs font-medium">
+                        {doctor.specialty}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-400">
+                      {new Date(doctor.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <button
+                        onClick={() => handleDeleteDoctor(doctor.id)}
+                        className="text-red-400 hover:text-red-300 transition-colors"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
