@@ -4,6 +4,9 @@ import { supabase } from "@/lib/supabase";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
+// Minimum confidence threshold - only accept matches above this
+const CONFIDENCE_THRESHOLD = 0.85; // 85% minimum
+
 export async function POST(req: NextRequest) {
   try {
     const { signatureBase64 } = await req.json();
@@ -39,9 +42,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           identified_doctor_id: null,
-          identified_doctor_name: "Pangalan ng doktor o null",
+          identified_doctor_name: null,
           confidence_score: 0.0,
-          reasoning: "Ang lagda ay hindi maitutugma dahil walang reference signature sa sistema.",
+          reasoning: "Walang reference signatures sa sistema. Subukan ulit pagkatapos mag-upload ng doctor signatures.",
           is_match_found: false,
         }
       );
@@ -49,7 +52,7 @@ export async function POST(req: NextRequest) {
 
     // 2. Prepare doctor list for prompt
     const doctorList = signatures
-      .map((s: any, i: number) => `${i + 1}. ${s.doctor.name} (${s.doctor.department || "—"})`)
+      .map((s: any, i: number) => `${i + 1}. ${s.doctor.name} (${s.doctor.specialty || "—"})`)
       .join("\n");
 
     // 3. Initialize Gemini model
@@ -58,27 +61,35 @@ export async function POST(req: NextRequest) {
     // 4. Build content array with uploaded signature + reference signatures
     const contentParts: any[] = [
       {
-        text: `Ikaw ay isang signature analysis expert para sa City of Ilagan Medical Center.
+        text: `IKAW AY SIGNATURE VERIFICATION EXPERT PARA SA CIMC.
 
-TASK: Tingnan ang UPLOADED SIGNATURE (una) at ihambing sa lahat ng REFERENCE SIGNATURES (susunod).
+**CRITICAL INSTRUCTIONS:**
+- ONLY match kung 85% o mas mataas ang confidence
+- Kung 85% pababa, i-return ang NULL (WALANG MATCH)
+- HINDI mag-guess kung uncertain ka
+- STRICT VERIFICATION LANG - mas mahalaga ang accuracy kaysa sa match
 
-Mga doktor sa sistema:
+TASK: I-compare ang UPLOADED SIGNATURE laban sa lahat ng REFERENCE SIGNATURES.
+
+Mga Doktor sa Sistema:
 ${doctorList}
 
-IMPORTANTE:
-- Tingnan ang overall shape, strokes, pressure, flow ng bawat signature
-- Hanapin ang closest match base sa visual characteristics
-- Return confidence score: 0.0 (walang match) hanggang 1.0 (perfect match)
-- Kung confidence < 0.3, i-return ang null para sa doctor
+MATCHING RULES:
+- Tingnan ang: overall shape, strokes, pressure, flow, unique characteristics
+- STRICT lang ang acceptance - kung 85% confidence pababa, walang match
+- Huwag mag-accept ng partial matches o "close enough"
+- Kung may doubt, i-return ang NULL
 
 Sagutin mo ONLY in valid JSON format (walang markdown, walang backticks):
 {
-  "identified_doctor_id": "UUID ng doktor o null",
-  "identified_doctor_name": "Name ng doktor o null",
-  "confidence_score": 0.0,
-  "reasoning": "Why this match",
+  "identified_doctor_id": "UUID o NULL kung walang match",
+  "identified_doctor_name": "Doctor name o NULL",
+  "confidence_score": 0.0 hanggang 1.0,
+  "reasoning": "Detailed explanation ng matching process",
   "is_match_found": true/false
-}`,
+}
+
+**REMEMBER: 85% minimum confidence required. NO EXCEPTIONS.**`,
       },
       {
         inlineData: {
@@ -90,7 +101,7 @@ Sagutin mo ONLY in valid JSON format (walang markdown, walang backticks):
 
     // 5. Add reference signature images
     for (const sig of signatures.slice(0, 5)) {
-      // Limit to 5 references para hindi sobrang marami
+      // Limit to 5 references
       try {
         const imageResponse = await fetch(sig.image_url);
         const blob = await imageResponse.arrayBuffer();
@@ -113,20 +124,50 @@ Sagutin mo ONLY in valid JSON format (walang markdown, walang backticks):
     const cleaned = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned);
 
-    // 7. Store result in scan_history
-    const { error: historyError } = await supabase.from("scan_history").insert({
-      scanned_image_url: signatureBase64, // or store in storage if preferred
-      identified_doctor_id: parsed.identified_doctor_id,
-      confidence_score: parsed.confidence_score,
-      notes: parsed.reasoning,
-    });
+    // 7. STRICT VALIDATION - Check confidence threshold
+    if (parsed.confidence_score < CONFIDENCE_THRESHOLD) {
+      // Below threshold - return no match even if Gemini found something
+      console.log(
+        `Confidence ${parsed.confidence_score} below threshold ${CONFIDENCE_THRESHOLD}. Rejecting match.`
+      );
+      return NextResponse.json({
+        identified_doctor_id: null,
+        identified_doctor_name: null,
+        confidence_score: parsed.confidence_score,
+        reasoning: `Ang matching confidence ay ${(parsed.confidence_score * 100).toFixed(1)}% - mas mababa sa 85% threshold. Imposibleng matukoy ang doktor nang may kumpiyansa.`,
+        is_match_found: false,
+      });
+    }
+
+    // 8. Get the matched doctor's signature image
+    let referenceImageUrl = null;
+    if (parsed.identified_doctor_name) {
+      const matchedSig = signatures.find(
+        (s: any) => s.doctor.name === parsed.identified_doctor_name
+      );
+      if (matchedSig) {
+        referenceImageUrl = matchedSig.image_url;
+      }
+    }
+
+    // 9. Store result in scan_history
+    const { error: historyError } = await supabase
+      .from("scan_history")
+      .insert({
+        scanned_image_url: signatureBase64,
+        identified_doctor_id: parsed.identified_doctor_id,
+        confidence_score: parsed.confidence_score,
+        notes: parsed.reasoning,
+      });
 
     if (historyError) {
       console.error("History insert error:", historyError);
-      // Don't fail the request, just log it
     }
 
-    return NextResponse.json(parsed);
+    return NextResponse.json({
+      ...parsed,
+      referenceImageUrl,
+    });
   } catch (error) {
     console.error("Identify error:", error);
     return NextResponse.json(
