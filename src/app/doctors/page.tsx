@@ -2,13 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { Plus, Trash2, Edit2, X } from "lucide-react";
+import { Plus, Trash2, Edit2, X, Upload } from "lucide-react";
+import Image from "next/image";
 
 interface Doctor {
   id: string;
   name: string;
   department: string;
   specialty: string;
+  signature_url: string;
   created_at: string;
 }
 
@@ -34,7 +36,11 @@ export default function DoctorsPage() {
   const [selectedSpecialty, setSelectedSpecialty] = useState<string>("All");
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
-  
+  const [previewSignature, setPreviewSignature] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [signaturePreviewUrl, setSignaturePreviewUrl] = useState<string>("");
+
   const [formData, setFormData] = useState({
     name: "",
     department: "",
@@ -72,15 +78,66 @@ export default function DoctorsPage() {
     new Set(doctors.map((d) => d.specialty))
   ).filter(Boolean);
 
+  // Handle signature file selection
+  function handleSignatureSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedImage(file);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setSignaturePreviewUrl(event.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  // Upload signature to Supabase storage
+  async function uploadSignature(file: File): Promise<string> {
+    try {
+      const timestamp = Date.now();
+      const filename = `signatures/${timestamp}-${file.name}`;
+
+      const { data, error } = await supabase.storage
+        .from("signatures")
+        .upload(filename, file);
+
+      if (error) throw error;
+
+      const { data: publicUrl } = supabase.storage
+        .from("signatures")
+        .getPublicUrl(filename);
+
+      return publicUrl.publicUrl;
+    } catch (err) {
+      console.error("Error uploading signature:", err);
+      throw new Error("Failed to upload signature");
+    }
+  }
+
   async function handleSaveDoctor(e: React.FormEvent) {
     e.preventDefault();
+
+    // Check if signature is provided
+    if (!selectedImage && !editingDoctor) {
+      alert("Please upload a signature for the doctor");
+      return;
+    }
 
     if (!formData.name || !formData.department || !formData.specialty) {
       alert("Please fill in all fields");
       return;
     }
 
+    setUploading(true);
+
     try {
+      let signatureUrl = editingDoctor?.signature_url || "";
+
+      // Upload new signature if selected
+      if (selectedImage) {
+        signatureUrl = await uploadSignature(selectedImage);
+      }
+
       if (editingDoctor) {
         // UPDATE existing doctor
         const { error } = await supabase
@@ -89,6 +146,7 @@ export default function DoctorsPage() {
             name: formData.name,
             department: formData.department,
             specialty: formData.specialty,
+            signature_url: signatureUrl,
           })
           .eq("id", editingDoctor.id);
 
@@ -102,6 +160,7 @@ export default function DoctorsPage() {
             name: formData.name,
             department: formData.department,
             specialty: formData.specialty,
+            signature_url: signatureUrl,
           },
         ]);
 
@@ -111,10 +170,14 @@ export default function DoctorsPage() {
       }
 
       setFormData({ name: "", department: "", specialty: "" });
+      setSelectedImage(null);
+      setSignaturePreviewUrl("");
       fetchDoctors();
     } catch (err) {
       console.error("Error saving doctor:", err);
       alert("Failed to save doctor");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -141,6 +204,8 @@ export default function DoctorsPage() {
       department: doctor.department,
       specialty: doctor.specialty,
     });
+    setSignaturePreviewUrl(doctor.signature_url);
+    setSelectedImage(null);
     setIsAddingNew(false);
   }
 
@@ -148,6 +213,8 @@ export default function DoctorsPage() {
     setEditingDoctor(null);
     setIsAddingNew(false);
     setFormData({ name: "", department: "", specialty: "" });
+    setSelectedImage(null);
+    setSignaturePreviewUrl("");
   }
 
   return (
@@ -156,7 +223,9 @@ export default function DoctorsPage() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">Mga Doktor</h1>
-          <p className="text-slate-400">Manage doctor profiles and signatures</p>
+          <p className="text-slate-400">
+            Manage doctor profiles and signatures for Doc Pirma
+          </p>
         </div>
 
         {/* Add Doctor Button */}
@@ -166,6 +235,8 @@ export default function DoctorsPage() {
               setIsAddingNew(true);
               setEditingDoctor(null);
               setFormData({ name: "", department: "", specialty: "" });
+              setSignaturePreviewUrl("");
+              setSelectedImage(null);
             }}
             className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
           >
@@ -222,6 +293,9 @@ export default function DoctorsPage() {
               <thead>
                 <tr className="border-b border-slate-700 bg-slate-800/30">
                   <th className="px-6 py-3 text-left text-sm font-semibold">
+                    Signature
+                  </th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold">
                     Name
                   </th>
                   <th className="px-6 py-3 text-left text-sm font-semibold">
@@ -242,9 +316,22 @@ export default function DoctorsPage() {
                 {filteredDoctors.map((doctor) => (
                   <tr
                     key={doctor.id}
-                    className="border-b border-slate-700 hover:bg-slate-800/50 transition-colors cursor-pointer"
-                    onClick={() => openEditModal(doctor)}
+                    className="border-b border-slate-700 hover:bg-slate-800/50 transition-colors"
                   >
+                    <td className="px-6 py-4">
+                      {doctor.signature_url && (
+                        <button
+                          onClick={() => setPreviewSignature(doctor.signature_url)}
+                          className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-600 hover:border-blue-500 transition-colors"
+                        >
+                          <img
+                            src={doctor.signature_url}
+                            alt={`${doctor.name} signature`}
+                            className="w-full h-full object-cover"
+                          />
+                        </button>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-sm font-medium">
                       {doctor.name}
                     </td>
@@ -260,20 +347,14 @@ export default function DoctorsPage() {
                     <td className="px-6 py-4 text-center">
                       <div className="flex justify-center gap-3">
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openEditModal(doctor);
-                          }}
+                          onClick={() => openEditModal(doctor)}
                           className="text-blue-400 hover:text-blue-300 transition-colors"
                           title="Edit"
                         >
                           <Edit2 size={18} />
                         </button>
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteDoctor(doctor.id);
-                          }}
+                          onClick={() => handleDeleteDoctor(doctor.id)}
                           className="text-red-400 hover:text-red-300 transition-colors"
                           title="Delete"
                         >
@@ -292,7 +373,7 @@ export default function DoctorsPage() {
       {/* Add/Edit Modal */}
       {(isAddingNew || editingDoctor) && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-md w-full">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-white">
                 {editingDoctor ? "Edit Doctor" : "Add New Doctor"}
@@ -359,6 +440,50 @@ export default function DoctorsPage() {
                 </select>
               </div>
 
+              {/* Signature Upload */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Doctor Signature <span className="text-red-400">*Required</span>
+                </label>
+                <div className="border-2 border-dashed border-slate-600 rounded-lg p-4 text-center hover:border-blue-500 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleSignatureSelect}
+                    className="hidden"
+                    id="signature-input"
+                  />
+                  <label
+                    htmlFor="signature-input"
+                    className="cursor-pointer flex flex-col items-center gap-2"
+                  >
+                    <Upload size={32} className="text-slate-400" />
+                    <span className="text-slate-300 font-medium">
+                      Click to upload or drag and drop
+                    </span>
+                    <span className="text-slate-500 text-sm">
+                      PNG, JPG, GIF up to 10MB
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Signature Preview */}
+              {signaturePreviewUrl && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Preview
+                  </label>
+                  <div className="bg-white rounded-lg p-4 flex justify-center">
+                    <img
+                      src={signaturePreviewUrl}
+                      alt="Signature preview"
+                      className="max-h-32 max-w-full object-contain"
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Buttons */}
               <div className="flex gap-3 pt-4">
                 <button
@@ -370,12 +495,41 @@ export default function DoctorsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition-colors"
+                  disabled={uploading || (!selectedImage && !editingDoctor)}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white font-semibold py-2 rounded-lg transition-colors disabled:cursor-not-allowed"
                 >
-                  {editingDoctor ? "Update" : "Add"}
+                  {uploading
+                    ? "Uploading..."
+                    : editingDoctor
+                      ? "Update"
+                      : "Add"}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Signature Preview Modal */}
+      {previewSignature && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-2xl w-full">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-white">Signature Preview</h2>
+              <button
+                onClick={() => setPreviewSignature(null)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="bg-white rounded-lg p-4 flex justify-center">
+              <img
+                src={previewSignature}
+                alt="Signature"
+                className="max-h-96 max-w-full object-contain"
+              />
+            </div>
           </div>
         </div>
       )}
