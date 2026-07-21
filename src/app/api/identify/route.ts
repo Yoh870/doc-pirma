@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 // Minimum confidence threshold - only accept matches above this
-const CONFIDENCE_THRESHOLD = 0.85; // 85% minimum
+const CONFIDENCE_THRESHOLD = 0.70; // 70% minimum (more realistic for real-world signatures)
 
 export async function POST(req: NextRequest) {
   try {
@@ -61,35 +61,47 @@ export async function POST(req: NextRequest) {
     // 4. Build content array with uploaded signature + reference signatures
     const contentParts: any[] = [
       {
-        text: `IKAW AY SIGNATURE VERIFICATION EXPERT PARA SA CIMC.
+        text: `IKAW AY SIGNATURE VERIFICATION EXPERT PARA SA CIMC HOSPITAL.
 
-**CRITICAL INSTRUCTIONS:**
-- ONLY match kung 85% o mas mataas ang confidence
-- Kung 85% pababa, i-return ang NULL (WALANG MATCH)
-- HINDI mag-guess kung uncertain ka
-- STRICT VERIFICATION LANG - mas mahalaga ang accuracy kaysa sa match
+**CRITICAL MATCHING RULES:**
+- I-analyze ang BUONG signature (top to bottom, left to right)
+- Kung partial lang o incomplete ang uploaded signature, magbigay ng lower confidence
+- ONLY accept confident matches (70% minimum)
+- Kung uncertain, magbigay ng low confidence o NULL
 
-TASK: I-compare ang UPLOADED SIGNATURE laban sa lahat ng REFERENCE SIGNATURES.
+**WHAT TO COMPARE:**
+1. Overall shape at flow ng signature
+2. Pen pressure at stroke characteristics
+3. Unique loops, curves, at distinctive marks
+4. Letter formation at connections
+5. Size at spacing
+
+**UPLOADED SIGNATURE:** Kung partial/angled lang, confidence mas mababa
+**REFERENCE SIGNATURES:** Complete reference signatures para i-match
 
 Mga Doktor sa Sistema:
 ${doctorList}
 
-MATCHING RULES:
-- Tingnan ang: overall shape, strokes, pressure, flow, unique characteristics
-- STRICT lang ang acceptance - kung 85% confidence pababa, walang match
-- Huwag mag-accept ng partial matches o "close enough"
-- Kung may doubt, i-return ang NULL
+MATCHING LOGIC:
+- Perfect match (95-100%): Identical characteristics, complete signature
+- Strong match (85-94%): Very similar, minor variations normal
+- Good match (70-84%): Recognizable same person, but differences present
+- Weak match (50-69%): Some similarities pero may doubt
+- No match (<50%): Completely different
+
+**IMPORTANT:**
+- Kung uploaded signature ay partial o angled, i-compare lang ng visible parts
+- Kung complete reference pero partial uploaded, confidence mas mababa
+- Huwag mag-force ng match kung uncertain - better to say NO MATCH
 
 Sagutin mo ONLY in valid JSON format (walang markdown, walang backticks):
 {
   "identified_doctor_id": "UUID o NULL kung walang match",
   "identified_doctor_name": "Doctor name o NULL",
   "confidence_score": 0.0 hanggang 1.0,
-  "reasoning": "Detailed explanation ng matching process",
+  "reasoning": "Detailed explanation - include kung partial/complete ang signature",
   "is_match_found": true/false
-}
-
-**REMEMBER: 85% minimum confidence required. NO EXCEPTIONS.**`,
+}`,
       },
       {
         inlineData: {
@@ -124,9 +136,9 @@ Sagutin mo ONLY in valid JSON format (walang markdown, walang backticks):
     const cleaned = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned);
 
-    // 7. STRICT VALIDATION - Check confidence threshold
+    // 7. VALIDATION - Check confidence threshold
     if (parsed.confidence_score < CONFIDENCE_THRESHOLD) {
-      // Below threshold - return no match even if Gemini found something
+      // Below threshold - return no match
       console.log(
         `Confidence ${parsed.confidence_score} below threshold ${CONFIDENCE_THRESHOLD}. Rejecting match.`
       );
@@ -134,7 +146,7 @@ Sagutin mo ONLY in valid JSON format (walang markdown, walang backticks):
         identified_doctor_id: null,
         identified_doctor_name: null,
         confidence_score: parsed.confidence_score,
-        reasoning: `Ang matching confidence ay ${(parsed.confidence_score * 100).toFixed(1)}% - mas mababa sa 85% threshold. Imposibleng matukoy ang doktor nang may kumpiyansa.`,
+        reasoning: `Ang matching confidence ay ${(parsed.confidence_score * 100).toFixed(1)}% - mas mababa sa 70% threshold. Hindi matukoy ang doktor nang may tiyak na kumpiyansa. Subukan ulit ng malinaw ang buong signature.`,
         is_match_found: false,
       });
     }
