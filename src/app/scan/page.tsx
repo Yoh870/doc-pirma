@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { Upload, AlertCircle } from "lucide-react";
-import Image from "next/image";
+import { Upload, Camera, AlertCircle, X } from "lucide-react";
 
 interface ScanResult {
   identified_doctor_id: string | null;
@@ -19,7 +18,53 @@ export default function ScanPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Start camera
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" }, // Back camera for better signature capture
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        setCameraActive(true);
+      }
+    } catch (err) {
+      console.error("Camera error:", err);
+      setError("Hindi ma-access ang camera. Gumamit ng file upload.");
+    }
+  }
+
+  // Stop camera
+  function stopCamera() {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
+      tracks.forEach((track) => track.stop());
+    }
+    setCameraActive(false);
+  }
+
+  // Capture photo from camera
+  function capturePhoto() {
+    if (videoRef.current && canvasRef.current) {
+      const context = canvasRef.current.getContext("2d");
+      if (context) {
+        canvasRef.current.width = videoRef.current.videoWidth;
+        canvasRef.current.height = videoRef.current.videoHeight;
+        context.drawImage(videoRef.current, 0, 0);
+        const imageData = canvasRef.current.toDataURL("image/jpeg");
+        setPreview(imageData);
+        stopCamera();
+        setError(null);
+        setResult(null);
+      }
+    }
+  }
+
+  // Handle file upload
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -33,9 +78,10 @@ export default function ScanPage() {
     reader.readAsDataURL(file);
   }
 
+  // Scan signature
   async function handleScan() {
     if (!preview) {
-      setError("Please upload a signature first");
+      setError("Please capture or upload a signature first");
       return;
     }
 
@@ -43,10 +89,8 @@ export default function ScanPage() {
     setError(null);
 
     try {
-      // Convert preview to base64 without data URL prefix
       const base64 = preview.split(",")[1];
 
-      // Fetch signatures from Supabase
       const { data: signatures } = await supabase
         .from("signatures")
         .select("id, image_url, doctor:doctors(id, name, department, specialty)");
@@ -77,7 +121,7 @@ export default function ScanPage() {
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">I-Scan ang Pirma</h1>
           <p className="text-slate-400">
-            I-upload ang signature para ma-identify kung kaninong doktor
+            Gamitin ang camera o mag-upload para ma-identify ang doktor
           </p>
         </div>
 
@@ -98,9 +142,39 @@ export default function ScanPage() {
           </div>
         </div>
 
-        {/* Upload Section */}
+        {/* Camera or Upload Section */}
         <div className="bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700 p-8 mb-8">
-          {preview ? (
+          {cameraActive ? (
+            // Camera Active
+            <div>
+              <p className="text-slate-300 font-semibold mb-4">📷 Camera Mode:</p>
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                className="w-full rounded-lg border border-slate-600 mb-4 bg-black"
+              />
+              <canvas ref={canvasRef} className="hidden" />
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={stopCamera}
+                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  <X size={20} />
+                  Cancel
+                </button>
+                <button
+                  onClick={capturePhoto}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                >
+                  <Camera size={20} />
+                  Kunin ang Photo
+                </button>
+              </div>
+            </div>
+          ) : preview ? (
+            // Preview Active
             <div>
               <p className="text-slate-400 mb-4">Preview:</p>
               <div className="bg-white rounded-lg p-4 mb-4 flex justify-center">
@@ -110,57 +184,75 @@ export default function ScanPage() {
                   className="max-h-48 max-w-full object-contain"
                 />
               </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setPreview(null);
+                    setResult(null);
+                    setError(null);
+                  }}
+                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors"
+                >
+                  I-Clear
+                </button>
+                <button
+                  onClick={handleScan}
+                  disabled={!preview || loading}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Nag-scan...
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={20} />
+                      I-Identify ang Pirma
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="border-2 border-dashed border-slate-600 rounded-lg p-8 text-center hover:border-blue-500 transition-colors mb-4">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="hidden"
-                id="file-input"
-              />
-              <label htmlFor="file-input" className="cursor-pointer">
-                <Upload className="mx-auto mb-4 text-slate-400" size={32} />
-                <p className="text-slate-300 font-medium mb-1">
-                  I-click para mag-upload o drag and drop
-                </p>
-                <p className="text-slate-500 text-sm">PNG, JPG, GIF hanggang 10MB</p>
-              </label>
+            // Initial Choice - Camera or Upload
+            <div className="space-y-4">
+              {/* Camera Option */}
+              <button
+                onClick={startCamera}
+                className="w-full bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-4 rounded-lg transition-colors flex items-center justify-center gap-3"
+              >
+                <Camera size={24} />
+                Gamitin ang Camera
+              </button>
+
+              {/* Divider */}
+              <div className="flex items-center gap-4">
+                <div className="flex-1 h-px bg-slate-600"></div>
+                <span className="text-slate-400 text-sm">o</span>
+                <div className="flex-1 h-px bg-slate-600"></div>
+              </div>
+
+              {/* Upload Option */}
+              <div className="border-2 border-dashed border-slate-600 rounded-lg p-8 text-center hover:border-blue-500 transition-colors">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="file-input"
+                />
+                <label htmlFor="file-input" className="cursor-pointer">
+                  <Upload className="mx-auto mb-4 text-slate-400" size={32} />
+                  <p className="text-slate-300 font-medium mb-1">
+                    I-click para mag-upload o drag and drop
+                  </p>
+                  <p className="text-slate-500 text-sm">PNG, JPG, GIF hanggang 10MB</p>
+                </label>
+              </div>
             </div>
           )}
-
-          <div className="flex gap-3">
-            {preview && (
-              <button
-                onClick={() => {
-                  setPreview(null);
-                  setResult(null);
-                  setError(null);
-                }}
-                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors"
-              >
-                I-Clear
-              </button>
-            )}
-            <button
-              onClick={handleScan}
-              disabled={!preview || loading}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Nag-scan...
-                </>
-              ) : (
-                <>
-                  <Upload size={20} />
-                  I-Identify ang Pirma
-                </>
-              )}
-            </button>
-          </div>
 
           {error && (
             <div className="mt-4 bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-300">
