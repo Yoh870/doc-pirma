@@ -19,22 +19,41 @@ export default function ScanPage() {
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
+  const [cameraAvailable, setCameraAvailable] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    // Check if camera is available on component mount
+    checkCameraAvailability();
+  }, []);
+
+  async function checkCameraAvailability() {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hasCamera = devices.some((device) => device.kind === "videoinput");
+      setCameraAvailable(hasCamera);
+    } catch (err) {
+      console.log("Camera check failed:", err);
+      setCameraAvailable(false);
+    }
+  }
 
   // Start camera
   async function startCamera() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" }, // Back camera for better signature capture
+        video: { facingMode: "environment" },
       });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         setCameraActive(true);
+        setError(null);
       }
     } catch (err) {
       console.error("Camera error:", err);
-      setError("Hindi ma-access ang camera. Gumamit ng file upload.");
+      setCameraAvailable(false);
+      setError("Camera access failed. Please use file upload instead.");
     }
   }
 
@@ -155,7 +174,7 @@ export default function ScanPage() {
                 className="w-full rounded-lg border border-slate-600 mb-4 bg-black"
               />
               <canvas ref={canvasRef} className="hidden" />
-              
+
               <div className="flex gap-3">
                 <button
                   onClick={stopCamera}
@@ -218,21 +237,25 @@ export default function ScanPage() {
           ) : (
             // Initial Choice - Camera or Upload
             <div className="space-y-4">
-              {/* Camera Option */}
-              <button
-                onClick={startCamera}
-                className="w-full bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-4 rounded-lg transition-colors flex items-center justify-center gap-3"
-              >
-                <Camera size={24} />
-                Gamitin ang Camera
-              </button>
+              {/* Camera Option - Only show if available */}
+              {cameraAvailable && (
+                <>
+                  <button
+                    onClick={startCamera}
+                    className="w-full bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-4 rounded-lg transition-colors flex items-center justify-center gap-3"
+                  >
+                    <Camera size={24} />
+                    Gamitin ang Camera
+                  </button>
 
-              {/* Divider */}
-              <div className="flex items-center gap-4">
-                <div className="flex-1 h-px bg-slate-600"></div>
-                <span className="text-slate-400 text-sm">o</span>
-                <div className="flex-1 h-px bg-slate-600"></div>
-              </div>
+                  {/* Divider */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1 h-px bg-slate-600"></div>
+                    <span className="text-slate-400 text-sm">o</span>
+                    <div className="flex-1 h-px bg-slate-600"></div>
+                  </div>
+                </>
+              )}
 
               {/* Upload Option */}
               <div className="border-2 border-dashed border-slate-600 rounded-lg p-8 text-center hover:border-blue-500 transition-colors">
