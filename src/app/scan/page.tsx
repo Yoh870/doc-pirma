@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Upload, Camera, AlertCircle, X } from "lucide-react";
+import { Upload, AlertCircle } from "lucide-react";
 
 interface ScanResult {
   identified_doctor_id: string | null;
@@ -18,51 +18,6 @@ export default function ScanPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cameraActive, setCameraActive] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  // Start camera
-  async function startCamera() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" }, // Back camera for better signature capture
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        setCameraActive(true);
-      }
-    } catch (err) {
-      console.error("Camera error:", err);
-      setError("Hindi ma-access ang camera. Gumamit ng file upload.");
-    }
-  }
-
-  // Stop camera
-  function stopCamera() {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-      tracks.forEach((track) => track.stop());
-    }
-    setCameraActive(false);
-  }
-
-  // Capture photo from camera
-  function capturePhoto() {
-    if (videoRef.current && canvasRef.current) {
-      const context = canvasRef.current.getContext("2d");
-      if (context) {
-        canvasRef.current.width = videoRef.current.videoWidth;
-        canvasRef.current.height = videoRef.current.videoHeight;
-        context.drawImage(videoRef.current, 0, 0);
-        const imageData = canvasRef.current.toDataURL("image/jpeg");
-        setPreview(imageData);
-        stopCamera();
-        setError(null);
-        setResult(null);
-      }
-    }
-  }
 
   // Handle file upload
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -81,7 +36,7 @@ export default function ScanPage() {
   // Scan signature
   async function handleScan() {
     if (!preview) {
-      setError("Please capture or upload a signature first");
+      setError("Please upload a signature first");
       return;
     }
 
@@ -121,7 +76,7 @@ export default function ScanPage() {
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">I-Scan ang Pirma</h1>
           <p className="text-slate-400">
-            Gamitin ang camera o mag-upload para ma-identify ang doktor
+            Mag-upload ng signature para ma-identify ang doktor
           </p>
         </div>
 
@@ -142,39 +97,9 @@ export default function ScanPage() {
           </div>
         </div>
 
-        {/* Camera or Upload Section */}
+        {/* Upload Section */}
         <div className="bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700 p-8 mb-8">
-          {cameraActive ? (
-            // Camera Active
-            <div>
-              <p className="text-slate-300 font-semibold mb-4">📷 Camera Mode:</p>
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                className="w-full rounded-lg border border-slate-600 mb-4 bg-black"
-              />
-              <canvas ref={canvasRef} className="hidden" />
-              
-              <div className="flex gap-3">
-                <button
-                  onClick={stopCamera}
-                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
-                >
-                  <X size={20} />
-                  Cancel
-                </button>
-                <button
-                  onClick={capturePhoto}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
-                >
-                  <Camera size={20} />
-                  Kunin ang Photo
-                </button>
-              </div>
-            </div>
-          ) : preview ? (
-            // Preview Active
+          {preview ? (
             <div>
               <p className="text-slate-400 mb-4">Preview:</p>
               <div className="bg-white rounded-lg p-4 mb-4 flex justify-center">
@@ -216,41 +141,21 @@ export default function ScanPage() {
               </div>
             </div>
           ) : (
-            // Initial Choice - Camera or Upload
-            <div className="space-y-4">
-              {/* Camera Option */}
-              <button
-                onClick={startCamera}
-                className="w-full bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-4 rounded-lg transition-colors flex items-center justify-center gap-3"
-              >
-                <Camera size={24} />
-                Gamitin ang Camera
-              </button>
-
-              {/* Divider */}
-              <div className="flex items-center gap-4">
-                <div className="flex-1 h-px bg-slate-600"></div>
-                <span className="text-slate-400 text-sm">o</span>
-                <div className="flex-1 h-px bg-slate-600"></div>
-              </div>
-
-              {/* Upload Option */}
-              <div className="border-2 border-dashed border-slate-600 rounded-lg p-8 text-center hover:border-blue-500 transition-colors">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  className="hidden"
-                  id="file-input"
-                />
-                <label htmlFor="file-input" className="cursor-pointer">
-                  <Upload className="mx-auto mb-4 text-slate-400" size={32} />
-                  <p className="text-slate-300 font-medium mb-1">
-                    I-click para mag-upload o drag and drop
-                  </p>
-                  <p className="text-slate-500 text-sm">PNG, JPG, GIF hanggang 10MB</p>
-                </label>
-              </div>
+            <div className="border-2 border-dashed border-slate-600 rounded-lg p-8 text-center hover:border-blue-500 transition-colors">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+                id="file-input"
+              />
+              <label htmlFor="file-input" className="cursor-pointer">
+                <Upload className="mx-auto mb-4 text-slate-400" size={32} />
+                <p className="text-slate-300 font-medium mb-1">
+                  I-click para mag-upload o drag and drop
+                </p>
+                <p className="text-slate-500 text-sm">PNG, JPG, GIF hanggang 10MB</p>
+              </label>
             </div>
           )}
 
