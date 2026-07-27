@@ -1,626 +1,497 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Plus, Trash2, Edit2, X, AlertTriangle } from "lucide-react";
+import { Upload, AlertCircle } from "lucide-react";
+import { Search, ArrowLeft, Upload, CheckCircle, XCircle } from "lucide-react";
+import Link from "next/link";
 
-interface Doctor {
-  id: string;
-  name: string;
-  department: string;
-  specialty: string;
-  signature_url: string;
-  created_at: string;
+interface ScanResult {
+  identified_doctor_id: string | null;
+  identified_doctor_name: string | null;
+  confidence_score: number;
+  reasoning: string;
+  is_match_found: boolean;
+  referenceImageUrl?: string | null;
 }
 
-const SPECIALTIES = [
-  "Surgical",
-  "Pediatrics",
-  "Psychiatry",
-  "Medical",
-  "OB-GYN",
-  "Cardiology",
-  "Neurology",
-  "Orthopedics",
-  "Dermatology",
-  "Emergency",
-  "Derma",
-  "Optha",
-  "ENT",
-];
+export default function ScanPage() {
+  const [image, setImage] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [result, setResult] = useState<ScanResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-export default function DoctorsPage() {
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedSpecialty, setSelectedSpecialty] = useState<string>("All");
-  const [isAddingNew, setIsAddingNew] = useState(false);
-  const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
-  const [previewSignature, setPreviewSignature] = useState<string | null>(null);
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [signaturePreviewUrl, setSignaturePreviewUrl] = useState<string>("");
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [resetting, setResetting] = useState(false);
+  // Handle file upload
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  const [formData, setFormData] = useState({
-    name: "",
-    department: "",
-    specialty: "",
-  });
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setPreview(event.target?.result as string);
+      setError(null);
+    if (file) {
+      setImage(file);
+      setPreview(URL.createObjectURL(file));
+      setResult(null);
+    };
+    reader.readAsDataURL(file);
+      setError(null);
+    }
+  }
 
-  useEffect(() => {
-    fetchDoctors();
-  }, []);
+  // Scan signature
+  async function handleScan() {
+    if (!preview) {
+      setError("Please upload a signature first");
+    if (!image) {
+      alert("Mag-upload muna ng signature!");
+      return;
+    }
 
-  async function fetchDoctors() {
+    setLoading(true);
+    setScanning(true);
+    setError(null);
+    setResult(null);
+
     try {
-      const { data, error } = await supabase
-        .from("doctors")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const base64 = preview.split(",")[1];
 
-      if (error) throw error;
-      setDoctors(data || []);
+      const { data: signatures } = await supabase
+      // 1. Get all stored signatures with doctor info
+      const { data: signatures, error: sigError } = await supabase
+        .from("signatures")
+        .select("id, image_url, doctor:doctors(id, name, department, specialty)");
+        .select("id, image_url, doctor_id, doctors(id, name)");
+
+      if (sigError) throw sigError;
+
+      if (!signatures || signatures.length === 0) {
+        setError("Walang stored signatures! Mag-add muna ng doktor.");
+        setScanning(false);
+        return;
+      }
+
+      // 2. Compress + convert to base64
+    const base64 = await new Promise<string>((resolve) => {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d")!;
+    const img = new Image();
+    img.onload = () => {
+        // Resize to max 800px
+        const maxSize = 800;
+        let { width, height } = img;
+        if (width > maxSize || height > maxSize) {
+        if (width > height) {
+            height = (height / width) * maxSize;
+            width = maxSize;
+        } else {
+            width = (width / height) * maxSize;
+            height = maxSize;
+        }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressed = canvas.toDataURL("image/jpeg", 0.7);
+        resolve(compressed.split(",")[1]);
+    };
+    img.src = URL.createObjectURL(image);
+    });
+
+      // 3. Prepare signatures list for AI
+      const signatureList = signatures.map((s: { id: string; image_url: string; doctor_id: string; doctors: { id: string; name: string }[] }) => ({
+        doctor_id: s.doctor_id,
+        doctor_name: s.doctors?.[0]?.name || "Unknown",
+        image_url: s.image_url,
+      }));
+
+      // 4. Call AI API
+      const response = await fetch("/api/identify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          signatureBase64: base64,
+          signatures: signatures || [],
+          signatures: signatureList,
+        }),
+      });
+
+      const data: ScanResult = await response.json();
+      setResult(data);
+      const data = await response.json();
+
+      if (data.error) {
+        setError(data.error);
+      } else {
+        setResult(data);
+
+        // 5. Save to scan history
+        await supabase.from("scan_history").insert({
+          identified_doctor_id: data.identified_doctor_id,
+          confidence_score: data.confidence_score,
+          notes: data.reasoning,
+        });
+      }
     } catch (err) {
-      console.error("Error fetching doctors:", err);
+      console.error("Scan error:", err);
+      setError("Failed to identify signature");
+      setError("May error sa pag-scan. Subukan ulit.");
+      console.error(err);
     } finally {
       setLoading(false);
+      setScanning(false);
     }
   }
 
-  // Filter doctors by selected specialty
-  const filteredDoctors =
-    selectedSpecialty === "All"
-      ? doctors
-      : doctors.filter((d) => d.specialty === selectedSpecialty);
-
-  // Get unique specialties from existing doctors
-  const uniqueSpecialties = Array.from(
-    new Set(doctors.map((d) => d.specialty))
-  ).filter(Boolean);
-
-  // Handle signature file selection
-  function handleSignatureSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedImage(file);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setSignaturePreviewUrl(event.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+  function getConfidenceColor(score: number) {
+    if (score >= 0.8) return "text-green-400";
+    if (score >= 0.5) return "text-yellow-400";
+    return "text-red-400";
   }
 
-  // Upload signature to Supabase storage
-  async function uploadSignature(file: File): Promise<string> {
-    try {
-      const timestamp = Date.now();
-      const filename = `signatures/${timestamp}-${file.name}`;
-
-      const { data, error } = await supabase.storage
-        .from("signatures")
-        .upload(filename, file);
-
-      if (error) throw error;
-
-      const { data: publicUrl } = supabase.storage
-        .from("signatures")
-        .getPublicUrl(filename);
-
-      return publicUrl.publicUrl;
-    } catch (err) {
-      console.error("Error uploading signature:", err);
-      throw new Error("Failed to upload signature");
-    }
-  }
-
-  async function handleSaveDoctor(e: React.FormEvent) {
-    e.preventDefault();
-
-    // Check if signature is provided
-    if (!selectedImage && !editingDoctor) {
-      alert("Please upload a signature for the doctor");
-      return;
-    }
-
-    if (!formData.name || !formData.department || !formData.specialty) {
-      alert("Please fill in all fields");
-      return;
-    }
-
-    setUploading(true);
-
-    try {
-      let signatureUrl = editingDoctor?.signature_url || "";
-
-      // Upload new signature if selected
-      if (selectedImage) {
-        signatureUrl = await uploadSignature(selectedImage);
-      }
-
-      if (editingDoctor) {
-        // UPDATE existing doctor
-        const { error } = await supabase
-          .from("doctors")
-          .update({
-            name: formData.name,
-            department: formData.department,
-            specialty: formData.specialty,
-            signature_url: signatureUrl,
-          })
-          .eq("id", editingDoctor.id);
-
-        if (error) throw error;
-        alert("Doctor updated successfully!");
-        setEditingDoctor(null);
-      } else {
-        // CREATE new doctor
-        const { error } = await supabase.from("doctors").insert([
-          {
-            name: formData.name,
-            department: formData.department,
-            specialty: formData.specialty,
-            signature_url: signatureUrl,
-          },
-        ]);
-
-        if (error) throw error;
-        alert("Doctor added successfully!");
-        setIsAddingNew(false);
-      }
-
-      setFormData({ name: "", department: "", specialty: "" });
-      setSelectedImage(null);
-      setSignaturePreviewUrl("");
-      fetchDoctors();
-    } catch (err) {
-      console.error("Error saving doctor:", err);
-      alert("Failed to save doctor");
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  async function handleDeleteDoctor(id: string) {
-    if (!confirm("Are you sure you want to delete this doctor?")) return;
-
-    try {
-      const { error } = await supabase.from("doctors").delete().eq("id", id);
-
-      if (error) throw error;
-
-      fetchDoctors();
-      alert("Doctor deleted successfully!");
-    } catch (err) {
-      console.error("Error deleting doctor:", err);
-      alert("Failed to delete doctor");
-    }
-  }
-
-  // RESET DATABASE - Delete all doctors and signatures
-  async function handleResetDatabase() {
-    setResetting(true);
-
-    try {
-      // Delete all records from doctors table
-      const { error: deleteError } = await supabase
-        .from("doctors")
-        .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000"); // Delete all
-
-      if (deleteError) throw deleteError;
-
-      // Delete all files from signatures storage
-      const { data: files, error: listError } = await supabase.storage
-        .from("signatures")
-        .list("signatures");
-
-      if (listError) throw listError;
-
-      if (files && files.length > 0) {
-        const filePaths = files.map((f) => `signatures/${f.name}`);
-        const { error: deleteFilesError } = await supabase.storage
-          .from("signatures")
-          .remove(filePaths);
-
-        if (deleteFilesError) throw deleteFilesError;
-      }
-
-      alert("✅ Database reset successfully! All doctors and signatures deleted.");
-      setShowResetConfirm(false);
-      fetchDoctors();
-    } catch (err) {
-      console.error("Error resetting database:", err);
-      alert("Failed to reset database");
-    } finally {
-      setResetting(false);
-    }
-  }
-
-  function openEditModal(doctor: Doctor) {
-    setEditingDoctor(doctor);
-    setFormData({
-      name: doctor.name,
-      department: doctor.department,
-      specialty: doctor.specialty,
-    });
-    setSignaturePreviewUrl(doctor.signature_url);
-    setSelectedImage(null);
-    setIsAddingNew(false);
-  }
-
-  function closeModals() {
-    setEditingDoctor(null);
-    setIsAddingNew(false);
-    setFormData({ name: "", department: "", specialty: "" });
-    setSelectedImage(null);
-    setSignaturePreviewUrl("");
+  function getConfidenceLabel(score: number) {
+    if (score >= 0.8) return "Mataas";
+    if (score >= 0.5) return "Katamtaman";
+    return "Mababa";
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-6">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-2xl mx-auto">
         {/* Header */}
-        <div className="mb-8 flex justify-between items-start">
-          <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Mga Doktor</h1>
-            <p className="text-slate-400">
-              Manage doctor profiles and signatures for Doc Pirma
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-white mb-2">I-Scan ang Pirma</h1>
+          <p className="text-slate-400">
+            Mag-upload ng signature para ma-identify ang doktor
+    <main className="min-h-screen bg-gray-950 p-4 max-w-2xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-6 pt-4">
+        <Link href="/" className="text-gray-400 hover:text-white">
+          <ArrowLeft size={24} />
+        </Link>
+        <h1 className="text-2xl font-bold text-white">I-Scan ang Pirma</h1>
+      </div>
+
+      {/* Upload area */}
+      <div className="bg-gray-800 rounded-2xl p-5 mb-4 border border-gray-700">
+        <label className="block cursor-pointer">
+          <div className="border-2 border-dashed border-gray-600 rounded-xl p-8 text-center hover:border-blue-500 transition-colors">
+            <Upload size={36} className="mx-auto mb-3 text-gray-500" />
+            <p className="text-white font-semibold">Mag-upload ng signature</p>
+            <p className="text-gray-500 text-sm mt-1">
+              JPG, PNG — Mula sa camera o gallery
             </p>
           </div>
-          {/* Reset Database Button */}
-          <button
-            onClick={() => setShowResetConfirm(true)}
-            className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
-          >
-            <AlertTriangle size={20} />
-            Reset Database
-          </button>
-        </div>
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+        </label>
 
-        {/* Add Doctor Button */}
-        <div className="mb-6">
-          <button
-            onClick={() => {
-              setIsAddingNew(true);
-              setEditingDoctor(null);
-              setFormData({ name: "", department: "", specialty: "" });
-              setSignaturePreviewUrl("");
-              setSelectedImage(null);
-            }}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
-          >
-            <Plus size={20} />
-            Add New Doctor
-          </button>
-        </div>
-
-        {/* Specialty Filter Tabs */}
-        {doctors.length > 0 && (
-          <div className="mb-6 flex flex-wrap gap-2">
-            <button
-              onClick={() => setSelectedSpecialty("All")}
-              className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
-                selectedSpecialty === "All"
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-              }`}
-            >
-              All ({doctors.length})
-            </button>
-
-            {uniqueSpecialties.map((spec) => {
-              const count = doctors.filter((d) => d.specialty === spec).length;
-              return (
-                <button
-                  key={spec}
-                  onClick={() => setSelectedSpecialty(spec)}
-                  className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
-                    selectedSpecialty === spec
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                  }`}
-                >
-                  {spec} ({count})
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Doctors Table */}
-        {loading ? (
-          <div className="text-center text-slate-400">Loading doctors...</div>
-        ) : filteredDoctors.length === 0 ? (
-          <div className="text-center text-slate-400">
-            {selectedSpecialty === "All"
-              ? "No doctors added yet"
-              : `No doctors in ${selectedSpecialty}`}
-          </div>
-        ) : (
-          <div className="overflow-x-auto bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700">
-            <table className="w-full text-white">
-              <thead>
-                <tr className="border-b border-slate-700 bg-slate-800/30">
-                  <th className="px-6 py-3 text-left text-sm font-semibold">
-                    Signature
-                  </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold">
-                    Department
-                  </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold">
-                    Specialty
-                  </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold">
-                    Added
-                  </th>
-                  <th className="px-6 py-3 text-center text-sm font-semibold">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredDoctors.map((doctor) => (
-                  <tr
-                    key={doctor.id}
-                    className="border-b border-slate-700 hover:bg-slate-800/50 transition-colors"
-                  >
-                    <td className="px-6 py-4">
-                      {doctor.signature_url && (
-                        <button
-                          onClick={() => setPreviewSignature(doctor.signature_url)}
-                          className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-600 hover:border-blue-500 transition-colors"
-                        >
-                          <img
-                            src={doctor.signature_url}
-                            alt={`${doctor.name} signature`}
-                            className="w-full h-full object-cover"
-                          />
-                        </button>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm font-medium">
-                      {doctor.name}
-                    </td>
-                    <td className="px-6 py-4 text-sm">{doctor.department}</td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className="bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full text-xs font-medium">
-                        {doctor.specialty}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-400">
-                      {new Date(doctor.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <div className="flex justify-center gap-3">
-                        <button
-                          onClick={() => openEditModal(doctor)}
-                          className="text-blue-400 hover:text-blue-300 transition-colors"
-                          title="Edit"
-                        >
-                          <Edit2 size={18} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteDoctor(doctor.id)}
-                          className="text-red-400 hover:text-red-300 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* Preview */}
+        {preview && (
+          <div className="mt-4">
+            <p className="text-gray-400 text-sm mb-2">Preview:</p>
+            <img
+              src={preview}
+              alt="Signature preview"
+              className="max-h-48 rounded-xl border border-gray-600 bg-white p-3 mx-auto block"
+            />
           </div>
         )}
       </div>
 
-      {/* Add/Edit Modal */}
-      {(isAddingNew || editingDoctor) && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-white">
-                {editingDoctor ? "Edit Doctor" : "Add New Doctor"}
-              </h2>
-              <button
-                onClick={closeModals}
-                className="text-slate-400 hover:text-white transition-colors"
-              >
-                <X size={24} />
-              </button>
+      {/* Scan button */}
+      {image && (
+        <button
+          onClick={handleScan}
+          disabled={scanning}
+          className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 text-white py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-colors mb-4"
+        >
+          <Search size={24} />
+          {scanning ? "Ine-identify..." : "I-identify ang Pirma"}
+        </button>
+      )}
+
+      {/* Loading state */}
+      {scanning && (
+        <div className="bg-gray-800 rounded-2xl p-6 text-center border border-gray-700">
+          <div className="animate-spin w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4" />
+          <p className="text-white font-semibold">Ina-analyze ng AI...</p>
+          <p className="text-gray-400 text-sm mt-1">
+            Ihinahambing sa lahat ng stored signatures
+          </p>
+        </div>
+      )}
+
+        {/* Photo Guidelines */}
+        <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 mb-6">
+          <div className="flex gap-3">
+            <AlertCircle className="text-blue-400 flex-shrink-0 mt-0.5" size={20} />
+            <div>
+              <h3 className="text-blue-300 font-semibold mb-2">📸 Mga Tip para sa Magandang Larawan:</h3>
+              <ul className="text-sm text-blue-200 space-y-1">
+                <li>✅ Kunin ang <strong>BUONG pirma</strong> (mula dulo hanggang dulo)</li>
+                <li>✅ <strong>Centered</strong> sa screen (hindi sa gilid)</li>
+                <li>✅ <strong>Maliwanag na liwanag</strong> (walang shadow o madilim)</li>
+                <li>✅ <strong>Clear at sharp</strong> (hindi blurry)</li>
+                <li>❌ Iwasan ang partial o angled na larawan</li>
+              </ul>
+            </div>
+          </div>
+      {/* Error */}
+      {error && (
+        <div className="bg-red-900/30 border border-red-700 rounded-2xl p-5 flex items-start gap-3">
+          <XCircle size={24} className="text-red-400 shrink-0 mt-0.5" />
+          <p className="text-red-300">{error}</p>
+        </div>
+      )}
+
+        {/* Upload Section */}
+        <div className="bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700 p-8 mb-8">
+          {preview ? (
+            <div>
+              <p className="text-slate-400 mb-4">Preview:</p>
+              <div className="bg-white rounded-lg p-4 mb-4 flex justify-center">
+                <img
+                  src={preview}
+                  alt="Signature preview"
+                  className="max-h-48 max-w-full object-contain"
+                />
+              </div>
+      {/* Result */}
+      {result && (
+        <div className={`rounded-2xl p-5 border ${
+          result.is_match_found
+            ? "bg-green-900/20 border-green-700"
+            : "bg-red-900/20 border-red-700"
+        }`}>
+          <div className="flex items-center gap-3 mb-4">
+            {result.is_match_found ? (
+              <CheckCircle size={28} className="text-green-400" />
+            ) : (
+              <XCircle size={28} className="text-red-400" />
+            )}
+            <h2 className="text-xl font-bold text-white">
+              {result.is_match_found ? "Na-identify!" : "Hindi Na-identify"}
+            </h2>
+          </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setPreview(null);
+                    setResult(null);
+                    setError(null);
+                  }}
+                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors"
+                >
+                  I-Clear
+                </button>
+                <button
+                  onClick={handleScan}
+                  disabled={!preview || loading}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Nag-scan...
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={20} />
+                      I-Identify ang Pirma
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="border-2 border-dashed border-slate-600 rounded-lg p-8 text-center hover:border-blue-500 transition-colors">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+                id="file-input"
+              />
+              <label htmlFor="file-input" className="cursor-pointer">
+                <Upload className="mx-auto mb-4 text-slate-400" size={32} />
+                <p className="text-slate-300 font-medium mb-1">
+                  I-click para mag-upload o drag and drop
+                </p>
+                <p className="text-slate-500 text-sm">PNG, JPG, GIF hanggang 10MB</p>
+              </label>
+          {/* Doctor Name - Big Green Text */}
+          {result.is_match_found && (
+            <div className="mb-6 text-center">
+              <p className="text-green-400 text-5xl font-bold">
+                {result.identified_doctor_name}
+              </p>
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-4 bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-300">
+              {error}
+          {/* Image Comparison */}
+          {/* DEBUG - Show referenceImageUrl value */}
+          {result.is_match_found && (
+            <div className="bg-gray-800 rounded-xl p-3 mb-4 text-center">
+              <p className="text-gray-500 text-xs mb-1">DEBUG:</p>
+              <p className="text-gray-300 text-xs break-all">
+                {result.referenceImageUrl ? "URL: " + result.referenceImageUrl : "referenceImageUrl is NULL"}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Results Section */}
+        {result && (
+          <div
+            className={`rounded-2xl border p-6 ${
+              result.is_match_found
+                ? "border-green-500/30 bg-green-500/10"
+                : "border-red-500/30 bg-red-500/10"
+            }`}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              {result.is_match_found ? (
+                <>
+                  <div className="w-8 h-8 rounded-full bg-green-500/30 flex items-center justify-center">
+                    <span className="text-green-400 font-bold">✓</span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-green-400">Na-identify!</h2>
+                </>
+              ) : (
+                <>
+                  <div className="w-8 h-8 rounded-full bg-red-500/30 flex items-center justify-center">
+                    <span className="text-red-400 font-bold">×</span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-red-400">Hindi Na-identify</h2>
+                </>
+              )}
             </div>
 
-            <form onSubmit={handleSaveDoctor} className="space-y-4">
-              {/* Doctor Name */}
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Doctor Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="Dr. John Doe"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
-                />
+            {result.is_match_found && (
+              <div className="mb-6">
+                <p className="text-green-300 text-sm mb-2">Doktor:</p>
+                <p className="text-green-400 text-4xl font-bold">
+                  {result.identified_doctor_name}
+                </p>
               </div>
+            )}
 
-              {/* Department */}
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Department
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., Surgical Ward"
-                  value={formData.department}
-                  onChange={(e) =>
-                    setFormData({ ...formData, department: e.target.value })
-                  }
-                  className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              {/* Specialty Dropdown */}
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Specialty
-                </label>
-                <select
-                  value={formData.specialty}
-                  onChange={(e) =>
-                    setFormData({ ...formData, specialty: e.target.value })
-                  }
-                  className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white focus:outline-none focus:border-blue-500"
-                >
-                  <option value="">Select Specialty</option>
-                  {SPECIALTIES.map((spec) => (
-                    <option key={spec} value={spec}>
-                      {spec}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Signature Upload */}
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Doctor Signature <span className="text-red-400">*Required</span>
-                </label>
-                <div className="border-2 border-dashed border-slate-600 rounded-lg p-4 text-center hover:border-blue-500 transition-colors">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleSignatureSelect}
-                    className="hidden"
-                    id="signature-input"
+            <div className="mb-6">
+              <p className="text-slate-300 text-sm mb-2">Confidence:</p>
+              <div className="flex items-center gap-4">
+                <div className="flex-1 bg-slate-700 rounded-full h-2 overflow-hidden">
+                  <div
+                    className={`h-full transition-all ${
+                      result.confidence_score >= 0.8
+                        ? "bg-green-500"
+                        : result.confidence_score >= 0.6
+                          ? "bg-yellow-500"
+                          : "bg-red-500"
+                    }`}
+                    style={{ width: `${result.confidence_score * 100}%` }}
+          {result.is_match_found && preview && result.referenceImageUrl && (
+            <div className="bg-gray-900/50 rounded-xl p-4 mb-4">
+              <p className="text-gray-400 text-sm mb-3">Comparison:</p>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <p className="text-gray-500 text-xs mb-2 text-center">Uploaded</p>
+                  <img
+                    src={preview}
+                    alt="Uploaded signature"
+                    className="w-full h-32 object-cover rounded-lg border border-gray-600 bg-white p-2"
                   />
-                  <label
-                    htmlFor="signature-input"
-                    className="cursor-pointer flex flex-col items-center gap-2"
-                  >
-                    <Plus size={32} className="text-slate-400" />
-                    <span className="text-slate-300 font-medium">
-                      Click to upload or drag and drop
-                    </span>
-                    <span className="text-slate-500 text-sm">
-                      PNG, JPG, GIF up to 10MB
-                    </span>
-                  </label>
                 </div>
+                <div className="flex-1">
+                  <p className="text-gray-500 text-xs mb-2 text-center">Reference</p>
+                  <img
+                    src={result.referenceImageUrl}
+                    alt="Reference signature"
+                    className="w-full h-32 object-cover rounded-lg border border-gray-600 bg-white p-2"
+                  />
+                </div>
+                <span className="text-slate-200 font-semibold min-w-fit">
+                  {(result.confidence_score * 100).toFixed(1)}%
+                </span>
               </div>
+            </div>
+          )}
 
-              {/* Signature Preview */}
-              {signaturePreviewUrl && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Preview
-                  </label>
-                  <div className="bg-white rounded-lg p-4 flex justify-center">
+            {/* Image Comparison */}
+            {result.is_match_found && preview && result.referenceImageUrl && (
+              <div className="mb-6">
+                <p className="text-slate-300 text-sm mb-3">Comparison:</p>
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <p className="text-slate-500 text-xs mb-2 text-center">Uploaded</p>
                     <img
-                      src={signaturePreviewUrl}
-                      alt="Signature preview"
-                      className="max-h-32 max-w-full object-contain"
+                      src={preview}
+                      alt="Uploaded signature"
+                      className="w-full h-32 object-cover rounded-lg border border-slate-600 bg-white p-2"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-slate-500 text-xs mb-2 text-center">Reference</p>
+                    <img
+                      src={result.referenceImageUrl}
+                      alt="Reference signature"
+                      className="w-full h-32 object-cover rounded-lg border border-slate-600 bg-white p-2"
                     />
                   </div>
                 </div>
-              )}
-
-              {/* Buttons */}
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={closeModals}
-                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={uploading || (!selectedImage && !editingDoctor)}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white font-semibold py-2 rounded-lg transition-colors disabled:cursor-not-allowed"
-                >
-                  {uploading
-                    ? "Uploading..."
-                    : editingDoctor
-                      ? "Update"
-                      : "Add"}
-                </button>
               </div>
-            </form>
+            )}
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-gray-400 text-sm">Confidence:</span>
+            <span className={`font-bold text-lg ${getConfidenceColor(result.confidence_score)}`}>
+              {Math.round(result.confidence_score * 100)}%
+            </span>
+            <span className={`text-sm ${getConfidenceColor(result.confidence_score)}`}>
+              ({getConfidenceLabel(result.confidence_score)})
+            </span>
           </div>
-        </div>
-      )}
 
-      {/* Signature Preview Modal */}
-      {previewSignature && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-2xl w-full">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-white">Signature Preview</h2>
-              <button
-                onClick={() => setPreviewSignature(null)}
-                className="text-slate-400 hover:text-white transition-colors"
-              >
-                <X size={24} />
-              </button>
+            <div>
+              <p className="text-slate-300 text-sm mb-2">Reasoning ng AI:</p>
+              <p className="text-slate-300 text-sm leading-relaxed">
+                {result.reasoning}
+              </p>
             </div>
-            <div className="bg-white rounded-lg p-4 flex justify-center">
-              <img
-                src={previewSignature}
-                alt="Signature"
-                className="max-h-96 max-w-full object-contain"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Reset Database Confirmation Modal */}
-      {showResetConfirm && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur flex items-center justify-center p-4 z-50">
-          <div className="bg-slate-800 border border-red-500/50 rounded-2xl p-8 max-w-md w-full">
-            <div className="flex items-center gap-3 mb-4">
-              <AlertTriangle className="text-red-400" size={32} />
-              <h2 className="text-2xl font-bold text-white">Reset Database?</h2>
-            </div>
-
-            <p className="text-slate-300 mb-6">
-              This will <strong>permanently delete</strong> ALL doctors and their signatures. 
-              This action <strong>CANNOT be undone</strong>.
+          <div className="bg-gray-900/50 rounded-xl p-4">
+            <p className="text-gray-400 text-sm mb-1">Reasoning ng AI:</p>
+            <p className="text-gray-300 text-sm leading-relaxed">
+              {result.reasoning}
             </p>
-
-            <p className="text-red-300 mb-6 font-semibold">
-              Are you absolutely sure you want to continue?
-            </p>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowResetConfirm(false)}
-                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-semibold py-2 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleResetDatabase}
-                disabled={resetting}
-                className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-slate-600 text-white font-semibold py-2 rounded-lg transition-colors disabled:cursor-not-allowed"
-              >
-                {resetting ? "Resetting..." : "Yes, Reset"}
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
+
+          <button
+            onClick={() => {
+              setImage(null);
+              setPreview(null);
+              setResult(null);
+            }}
+            className="w-full mt-4 bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-xl font-semibold transition-colors"
+          >
+            Mag-scan ulit
+          </button>
+        </div>
+      )}
+    </main>
   );
 }
