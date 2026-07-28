@@ -59,6 +59,15 @@ export default function HomePage() {
       <p className="text-gray-700 text-xs mt-12">
         Powered by Claude AI + Supabase
       </p>
+
+      <form action="/api/logout" method="POST" className="mt-4">
+        <button
+          type="submit"
+          className="text-gray-500 hover:text-gray-300 text-sm underline"
+        >
+          Mag-logout
+        </button>
+      </form>
     </main>
   );
 }
