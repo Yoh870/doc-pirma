@@ -21,7 +21,7 @@ const SPECIALTIES = [
   "Medical",
   "OB-GYN",
   "Cardiology",
-  "Neurology",
+  "Urology",
   "Orthopedics",
   "Dermatology",
   "Emergency",
