@@ -21,7 +21,7 @@ const SPECIALTIES = [
   "Medical",
   "OB-GYN",
   "Cardiology",
-  "Neurology",
+  "Urology",
   "Orthopedics",
   "Dermatology",
   "Emergency",
@@ -34,6 +34,7 @@ export default function DoctorsPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSpecialty, setSelectedSpecialty] = useState<string>("All");
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
   const [previewSignature, setPreviewSignature] = useState<string | null>(null);
@@ -67,11 +68,16 @@ export default function DoctorsPage() {
     }
   }
 
-  // Filter doctors by selected specialty
-  const filteredDoctors =
-    selectedSpecialty === "All"
-      ? doctors
-      : doctors.filter((d) => d.specialty === selectedSpecialty);
+  // Filter doctors by selected specialty and search query (by name)
+  const filteredDoctors = doctors
+    .filter((d) =>
+      selectedSpecialty === "All" ? true : d.specialty === selectedSpecialty
+    )
+    .filter((d) =>
+      searchQuery.trim() === ""
+        ? true
+        : d.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
+    );
 
   // Get unique specialties from existing doctors
   const uniqueSpecialties = Array.from(
@@ -245,6 +251,17 @@ export default function DoctorsPage() {
           </button>
         </div>
 
+        {/* Search by Name */}
+        <div className="mb-6">
+          <input
+            type="text"
+            placeholder="Maghanap ng doktor..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full max-w-md px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+
         {/* Specialty Filter Tabs */}
         {doctors.length > 0 && (
           <div className="mb-6 flex flex-wrap gap-2">
@@ -283,9 +300,11 @@ export default function DoctorsPage() {
           <div className="text-center text-slate-400">Loading doctors...</div>
         ) : filteredDoctors.length === 0 ? (
           <div className="text-center text-slate-400">
-            {selectedSpecialty === "All"
-              ? "No doctors added yet"
-              : `No doctors in ${selectedSpecialty}`}
+            {searchQuery.trim() !== ""
+              ? `No doctors found for "${searchQuery}"`
+              : selectedSpecialty === "All"
+                ? "No doctors added yet"
+                : `No doctors in ${selectedSpecialty}`}
           </div>
         ) : (
           <div className="overflow-x-auto bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700">
