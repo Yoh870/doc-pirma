@@ -39,14 +39,20 @@ export default function ScanPage() {
       });
       streamRef.current = stream;
       setCameraActive(true);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
     } catch (err) {
       console.error("Camera error:", err);
       setError("Hindi ma-access ang camera. Bigyan ng permission o subukan mag-upload.");
     }
   }
+
+  useEffect(() => {
+    if (cameraActive && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch((err) => {
+        console.error("Video play error:", err);
+      });
+    }
+  }, [cameraActive]);
 
   function stopCamera() {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -196,6 +202,7 @@ export default function ScanPage() {
               ref={videoRef}
               autoPlay
               playsInline
+              muted
               className="w-full rounded-xl border border-gray-600 bg-black"
             />
             <div className="flex gap-3 mt-4">
