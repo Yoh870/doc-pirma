@@ -101,8 +101,8 @@ Sagutin mo ONLY in valid JSON format (walang markdown, walang backticks):
       },
     ];
 
-    // Add reference signature images (limit to 5)
-    for (const doctor of doctors.slice(0, 5)) {
+    // Add reference signature images (ALL doctors with a signature)
+    for (const doctor of doctors) {
       try {
         const imageResponse = await fetch(doctor.signature_url);
         const blob = await imageResponse.arrayBuffer();
