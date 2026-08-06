@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Upload, ArrowLeft } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Camera, ArrowLeft, RotateCcw, Upload } from "lucide-react";
 import Link from "next/link";
 
 interface ScanResult {
@@ -19,6 +19,62 @@ export default function ScanPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  async function startCamera() {
+    setError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
+      streamRef.current = stream;
+      setCameraActive(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err) {
+      console.error("Camera error:", err);
+      setError("Hindi ma-access ang camera. Bigyan ng permission o subukan mag-upload.");
+    }
+  }
+
+  function stopCamera() {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setCameraActive(false);
+  }
+
+  function capturePhoto() {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
+      setImage(file);
+      setPreview(URL.createObjectURL(file));
+      setResult(null);
+      setError(null);
+      stopCamera();
+    }, "image/jpeg", 0.9);
+  }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -121,32 +177,81 @@ export default function ScanPage() {
       </div>
 
       <div className="bg-gray-800 rounded-2xl p-5 mb-4 border border-gray-700">
-        <label className="block cursor-pointer">
-          <div className="border-2 border-dashed border-gray-600 rounded-xl p-8 text-center hover:border-blue-500 transition-colors">
-            <Upload size={36} className="mx-auto mb-3 text-gray-500" />
-            <p className="text-white font-semibold">Mag-upload ng signature</p>
+        {!preview && !cameraActive && (
+          <button
+            onClick={startCamera}
+            className="w-full border-2 border-dashed border-gray-600 rounded-xl p-8 text-center hover:border-blue-500 transition-colors"
+          >
+            <Camera size={36} className="mx-auto mb-3 text-gray-500" />
+            <p className="text-white font-semibold">Buksan ang Camera</p>
             <p className="text-gray-500 text-sm mt-1">
-              JPG, PNG — Mula sa camera o gallery
+              I-click para kumuha ng larawan ng pirma
             </p>
+          </button>
+        )}
+
+        {cameraActive && (
+          <div>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              className="w-full rounded-xl border border-gray-600 bg-black"
+            />
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={capturePhoto}
+                className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+              >
+                <Camera size={20} />
+                Kunin ang Larawan
+              </button>
+              <button
+                onClick={stopCamera}
+                className="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-xl transition-colors"
+              >
+                Kanselahin
+              </button>
+            </div>
           </div>
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleFileChange}
-            className="hidden"
-          />
-        </label>
+        )}
 
         {preview && (
-          <div className="mt-4">
+          <div>
             <p className="text-gray-400 text-sm mb-2">Preview:</p>
             <img
               src={preview}
               alt="Signature preview"
               className="max-h-48 rounded-xl border border-gray-600 bg-white p-3 mx-auto block"
             />
+            <button
+              onClick={() => {
+                resetAll();
+                startCamera();
+              }}
+              className="w-full mt-3 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+            >
+              <RotateCcw size={16} />
+              Kunin Ulit
+            </button>
           </div>
+        )}
+
+        <canvas ref={canvasRef} className="hidden" />
+
+        {!cameraActive && (
+          <label className="block cursor-pointer mt-3">
+            <div className="text-center text-gray-500 text-sm hover:text-blue-400 transition-colors flex items-center justify-center gap-2">
+              <Upload size={14} />
+              O mag-upload ng larawan mula sa gallery
+            </div>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+          </label>
         )}
       </div>
 
