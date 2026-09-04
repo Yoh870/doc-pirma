@@ -28,6 +28,7 @@ const SPECIALTIES = [
   "Derma",
   "Optha",
   "ENT",
+  "Nephrology",
 ];
 
 export default function DoctorsPage() {
