@@ -42,6 +42,7 @@ export default function DoctorsPage() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [signaturePreviewUrl, setSignaturePreviewUrl] = useState<string>("");
+  const [isCustomSpecialty, setIsCustomSpecialty] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -211,6 +212,7 @@ export default function DoctorsPage() {
       department: doctor.department,
       specialty: doctor.specialty,
     });
+    setIsCustomSpecialty(!SPECIALTIES.includes(doctor.specialty));
     setSignaturePreviewUrl(doctor.signature_url);
     setSelectedImage(null);
     setIsAddingNew(false);
@@ -220,6 +222,7 @@ export default function DoctorsPage() {
     setEditingDoctor(null);
     setIsAddingNew(false);
     setFormData({ name: "", department: "", specialty: "" });
+    setIsCustomSpecialty(false);
     setSelectedImage(null);
     setSignaturePreviewUrl("");
   }
@@ -242,6 +245,7 @@ export default function DoctorsPage() {
               setIsAddingNew(true);
               setEditingDoctor(null);
               setFormData({ name: "", department: "", specialty: "" });
+              setIsCustomSpecialty(false);
               setSignaturePreviewUrl("");
               setSelectedImage(null);
             }}
@@ -445,10 +449,16 @@ export default function DoctorsPage() {
                   Specialty
                 </label>
                 <select
-                  value={formData.specialty}
-                  onChange={(e) =>
-                    setFormData({ ...formData, specialty: e.target.value })
-                  }
+                  value={isCustomSpecialty ? "Other" : formData.specialty}
+                  onChange={(e) => {
+                    if (e.target.value === "Other") {
+                      setIsCustomSpecialty(true);
+                      setFormData({ ...formData, specialty: "" });
+                    } else {
+                      setIsCustomSpecialty(false);
+                      setFormData({ ...formData, specialty: e.target.value });
+                    }
+                  }}
                   className="w-full px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white focus:outline-none focus:border-blue-500"
                 >
                   <option value="">Select Specialty</option>
@@ -457,7 +467,20 @@ export default function DoctorsPage() {
                       {spec}
                     </option>
                   ))}
+                  <option value="Other">Other (type new)</option>
                 </select>
+
+                {isCustomSpecialty && (
+                  <input
+                    type="text"
+                    placeholder="I-type ang bagong specialty"
+                    value={formData.specialty}
+                    onChange={(e) =>
+                      setFormData({ ...formData, specialty: e.target.value })
+                    }
+                    className="w-full mt-2 px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                  />
+                )}
               </div>
 
               {/* Signature Upload */}
