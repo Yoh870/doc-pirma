@@ -341,12 +341,12 @@ export default function DoctorsPage() {
                       {doctor.signature_url && (
                         <button
                           onClick={() => setPreviewSignature(doctor.signature_url)}
-                          className="relative w-52 h-52 rounded-lg overflow-hidden border border-slate-600 hover:border-blue-500 transition-colors bg-white"
+                          className="relative w-80 h-80 rounded-lg overflow-hidden border border-slate-600 hover:border-blue-500 transition-colors bg-white"
                         >
                           <img
                             src={doctor.signature_url}
                             alt={`${doctor.name} signature`}
-                            className="w-full h-full object-contain p-2"
+                            className="w-full h-full object-contain p-3"
                           />
                         </button>
                       )}
