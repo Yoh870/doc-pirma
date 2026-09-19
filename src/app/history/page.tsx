@@ -52,13 +52,18 @@ export default function HistoryPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-950 p-4 max-w-2xl mx-auto">
+    <main className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-blue-950 p-4 max-w-2xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6 pt-4">
-        <Link href="/" className="text-gray-400 hover:text-white">
+        <Link
+          href="/"
+          className="text-gray-400 hover:text-white transition-colors p-2 -ml-2 rounded-lg hover:bg-white/5"
+        >
           <ArrowLeft size={24} />
         </Link>
-        <h1 className="text-2xl font-bold text-white">Scan History</h1>
+        <h1 className="text-2xl font-bold text-white tracking-tight">
+          Scan History
+        </h1>
       </div>
 
       {loading ? (
@@ -73,14 +78,18 @@ export default function HistoryPage() {
           {records.map((record) => (
             <div
               key={record.id}
-              className="bg-gray-800 rounded-2xl p-4 border border-gray-700"
+              className="bg-gray-800/60 backdrop-blur rounded-2xl p-4 border border-gray-700/50 shadow-lg shadow-black/10 hover:border-gray-600 transition-colors"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
                   {record.identified_doctor_id ? (
-                    <CheckCircle size={20} className="text-green-400 shrink-0" />
+                    <div className="w-8 h-8 rounded-full bg-green-500/15 border border-green-500/20 flex items-center justify-center shrink-0">
+                      <CheckCircle size={16} className="text-green-400" />
+                    </div>
                   ) : (
-                    <XCircle size={20} className="text-red-400 shrink-0" />
+                    <div className="w-8 h-8 rounded-full bg-red-500/15 border border-red-500/20 flex items-center justify-center shrink-0">
+                      <XCircle size={16} className="text-red-400" />
+                    </div>
                   )}
                   <div>
                     <p className="font-semibold text-white">
