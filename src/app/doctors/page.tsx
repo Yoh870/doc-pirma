@@ -228,18 +228,18 @@ export default function DoctorsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-blue-950 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">Mga Doktor</h1>
-          <p className="text-slate-400">
-            Manage doctor profiles and signatures for Doc Pirma
-          </p>
-        </div>
-
-        {/* Add Doctor Button */}
-        <div className="mb-6">
+        <div className="mb-8 flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">
+              Mga Doktor
+            </h1>
+            <p className="text-slate-400">
+              Manage doctor profiles and signatures para sa Doc Pirma
+            </p>
+          </div>
           <button
             onClick={() => {
               setIsAddingNew(true);
@@ -249,7 +249,7 @@ export default function DoctorsPage() {
               setSignaturePreviewUrl("");
               setSelectedImage(null);
             }}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
+            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-semibold py-2.5 px-5 rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-blue-500/10"
           >
             <Plus size={20} />
             Add New Doctor
@@ -263,7 +263,7 @@ export default function DoctorsPage() {
             placeholder="Maghanap ng doktor..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full max-w-md px-4 py-2 rounded-lg bg-slate-700/50 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+            className="w-full max-w-md px-4 py-2.5 rounded-xl bg-slate-800/60 backdrop-blur border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all"
           />
         </div>
 
@@ -272,10 +272,10 @@ export default function DoctorsPage() {
           <div className="mb-6 flex flex-wrap gap-2">
             <button
               onClick={() => setSelectedSpecialty("All")}
-              className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+              className={`px-4 py-2 rounded-xl font-semibold transition-all ${
                 selectedSpecialty === "All"
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                  ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20"
+                  : "bg-slate-800/60 text-slate-300 hover:bg-slate-700 border border-slate-700/50"
               }`}
             >
               All ({doctors.length})
@@ -287,10 +287,10 @@ export default function DoctorsPage() {
                 <button
                   key={spec}
                   onClick={() => setSelectedSpecialty(spec)}
-                  className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+                  className={`px-4 py-2 rounded-xl font-semibold transition-all ${
                     selectedSpecialty === spec
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                      ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20"
+                      : "bg-slate-800/60 text-slate-300 hover:bg-slate-700 border border-slate-700/50"
                   }`}
                 >
                   {spec} ({count})
@@ -312,7 +312,7 @@ export default function DoctorsPage() {
                 : `No doctors in ${selectedSpecialty}`}
           </div>
         ) : (
-          <div className="overflow-x-auto bg-slate-800/50 backdrop-blur rounded-2xl border border-slate-700">
+          <div className="overflow-x-auto bg-slate-800/40 backdrop-blur rounded-2xl border border-slate-700/50 shadow-xl shadow-black/20">
             <table className="w-full text-white">
               <thead>
                 <tr className="border-b border-slate-700 bg-slate-800/30">
