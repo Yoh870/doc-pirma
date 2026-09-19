@@ -3,19 +3,21 @@ import { Search, Users, History, Stethoscope } from "lucide-react";
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-gray-950 flex flex-col items-center justify-center p-6">
+    <main className="min-h-screen bg-gradient-to-br from-gray-950 via-slate-900 to-blue-950 flex flex-col items-center justify-center p-6">
       {/* Header */}
       <div className="text-center mb-12">
         <div className="flex items-center justify-center gap-3 mb-4">
-          <div className="bg-blue-600 p-3 rounded-2xl">
+          <div className="bg-gradient-to-br from-blue-500 to-blue-700 p-3 rounded-2xl shadow-lg shadow-blue-500/20">
             <Stethoscope size={32} className="text-white" />
           </div>
-          <h1 className="text-4xl font-bold text-white">Doc Pirma</h1>
+          <h1 className="text-4xl font-bold text-white tracking-tight">
+            Doc Pirma
+          </h1>
         </div>
-        <p className="text-gray-400 text-lg">
+        <p className="text-gray-300 text-lg">
           I-identify ang pirma ng doktor gamit ang AI
         </p>
-        <p className="text-gray-600 text-sm mt-1">
+        <p className="text-gray-500 text-sm mt-1 font-medium">
           City of Ilagan Medical Center
         </p>
       </div>
@@ -24,7 +26,7 @@ export default function HomePage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl">
         <Link
           href="/scan"
-          className="group bg-blue-600 hover:bg-blue-500 rounded-2xl p-6 flex flex-col items-center gap-3 transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/25"
+          className="group bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 rounded-2xl p-6 flex flex-col items-center gap-3 transition-all duration-200 hover:scale-105 shadow-lg shadow-blue-500/10 hover:shadow-xl hover:shadow-blue-500/30"
         >
           <Search size={36} className="text-white" />
           <div className="text-center">
@@ -35,7 +37,7 @@ export default function HomePage() {
 
         <Link
           href="/doctors"
-          className="group bg-gray-800 hover:bg-gray-700 rounded-2xl p-6 flex flex-col items-center gap-3 transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-gray-500/25 border border-gray-700"
+          className="group bg-gray-800/80 hover:bg-gray-800 rounded-2xl p-6 flex flex-col items-center gap-3 transition-all duration-200 hover:scale-105 shadow-lg shadow-black/10 hover:shadow-xl border border-gray-700/50 hover:border-gray-600"
         >
           <Users size={36} className="text-blue-400" />
           <div className="text-center">
@@ -46,7 +48,7 @@ export default function HomePage() {
 
         <Link
           href="/history"
-          className="group bg-gray-800 hover:bg-gray-700 rounded-2xl p-6 flex flex-col items-center gap-3 transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-gray-500/25 border border-gray-700"
+          className="group bg-gray-800/80 hover:bg-gray-800 rounded-2xl p-6 flex flex-col items-center gap-3 transition-all duration-200 hover:scale-105 shadow-lg shadow-black/10 hover:shadow-xl border border-gray-700/50 hover:border-gray-600"
         >
           <History size={36} className="text-purple-400" />
           <div className="text-center">
@@ -56,9 +58,17 @@ export default function HomePage() {
         </Link>
       </div>
 
-      <p className="text-gray-700 text-xs mt-12">
-        Powered by Claude AI + Supabase
-      </p>
+      <div className="flex flex-col items-center gap-2 mt-14">
+        <p className="text-gray-600 text-xs">
+          Powered by Claude AI + Supabase
+        </p>
+        <p className="text-gray-700 text-xs">
+          Developed by{" "}
+          <span className="text-gray-500 font-medium">
+            Mario Jimenez Gañgan
+          </span>
+        </p>
+      </div>
 
       <form action="/api/logout" method="POST" className="mt-4">
         <button
